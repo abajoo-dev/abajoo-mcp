@@ -214,22 +214,22 @@ export function loginPage({ csrf, error = '', notice = '' }) {
 
     <form action="/login" method="post" autocomplete="on">
       <input type="hidden" name="csrf" value="${escape(csrf)}">
-      
+
       <div class="form-group">
         <label for="username" style="display:flex;justify-content:space-between">
-          <span>Username</span>
-          <small style="color:var(--tosca)">Default: admin</small>
+          <span>Username atau Email</span>
+          <small style="color:var(--tosca)">admin atau Akun Terdaftar</small>
         </label>
-        <input id="username" name="username" type="text" value="admin" autocomplete="username" required placeholder="admin">
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus placeholder="admin atau nama@abajoo.co.id">
       </div>
 
       <div class="form-group">
         <label for="password" style="display:flex;justify-content:space-between">
           <span>Password</span>
-          <small style="color:var(--text-dim)">Master Password</small>
+          <small style="color:var(--text-dim)">Password Akun</small>
         </label>
         <div class="password-wrap">
-          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus placeholder="Masukkan master password">
+          <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Masukkan password">
           <button type="button" class="password-toggle" id="pwdToggle" aria-label="Toggle password visibility" title="Lihat password">👁</button>
         </div>
       </div>
@@ -239,7 +239,18 @@ export function loginPage({ csrf, error = '', notice = '' }) {
       </button>
     </form>
 
-    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;color:var(--text-dim)">
+    <div style="margin-top:20px;text-align:center">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="flex:1;height:1px;background:var(--border-subtle)"></div>
+        <span style="font-size:0.75rem;color:var(--text-dim);letter-spacing:0.05em">ATAU</span>
+        <div style="flex:1;height:1px;background:var(--border-subtle)"></div>
+      </div>
+      <a href="/register" class="btn btn-secondary" style="display:block;width:100%;padding:12px;text-align:center;text-decoration:none;font-weight:600;font-size:0.9rem">
+        + Create Account (Register)
+      </a>
+    </div>
+
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;color:var(--text-dim)">
       <a href="/" style="color:var(--tosca);text-decoration:none">← Beranda</a>
       <span>Session 8 jam · AES-256</span>
     </div>
