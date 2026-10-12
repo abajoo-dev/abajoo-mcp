@@ -430,7 +430,7 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
           <div class="form-group">
             <label>Odoo Version</label>
             <select name="version">
-              <option value="auto">Auto-detect (19 JSON-2 / 14–18 RPC)</option>
+              <option value="auto">Auto Detect</option>
               <option value="19">Odoo 19 (JSON-2 API)</option>
               <option value="18">Odoo 18 (JSON-RPC)</option>
               <option value="17">Odoo 17 (JSON-RPC)</option>
