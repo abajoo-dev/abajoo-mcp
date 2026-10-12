@@ -110,11 +110,14 @@ export async function detectVersion(connection, config) {
     await probeOdoo({ ...connection, version: '19' }, config);
     return '19';
   } catch (error) {
-    if (!(error instanceof OdooHttpError) || error.status !== 404) throw error;
+    // 404 = endpoint not found; redirect = Odoo ≤18 redirects /json/2/... to /web/login
+    const isNotFound = error instanceof OdooHttpError && error.status === 404;
+    const isRedirect = /redirect/i.test(String(error?.message || ''));
+    if (!isNotFound && !isRedirect) throw error;
   }
   const info = await request(`${connection.url}/jsonrpc`, {
     jsonrpc: '2.0', method: 'call', params: { service: 'common', method: 'version', args: [] }, id: 1,
-  }, {}, true);
+  }, {}, true, { allowSelfSigned: connection.allowSelfSigned });
   const major = info?.server_version_info?.[0];
   if (![17, 18].includes(major)) throw new Error(`Unsupported Odoo version or JSON-2 unavailable (detected ${String(major || 'unknown')})`);
   await probeOdoo({ ...connection, version: String(major) }, config);

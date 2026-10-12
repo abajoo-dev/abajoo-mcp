@@ -1,5 +1,34 @@
 # ABJ Odoo MCP
 
+## Quick Install (Any Device)
+
+Install globally from GitHub — no clone needed:
+
+```bash
+npm install -g git+https://github.com/abajoo-dev/abajoo-mcp.git
+```
+
+**Option A — Self-hosted on this machine (macOS):**
+```bash
+abj-odoo-mcp quickstart
+```
+Sets admin password, starts background daemon, registers with Claude Desktop, Codex, Claude Code, Cursor, and Antigravity CLI automatically.
+
+**Option B — Connect to existing server (team or VPS):**
+```bash
+abj-odoo-mcp setup https://your-server/mcp
+```
+Enter the MCP token your admin generated. Registers proxy on this device.
+
+**Standalone server (Linux/VPS):**
+```bash
+abj-odoo-mcp init    # set admin password, get master token
+abj-odoo-mcp serve   # foreground — wrap with systemd/PM2 as needed
+```
+Then open `http://HOST:8090` to add Odoo connections.
+
+---
+
 Standalone, self-hosted Odoo-to-MCP middleware. **No Odoo addon, restart, or module installation.** This release implements an admin login and dashboard, connection manager, MCP session and tool-call audit, version-specific native Odoo API adapters (17/18 RPC, 19 JSON-2), generated **read-only** search tools, and a local npm CLI that registers a single MCP gateway with installed clients.
 
 ## Requirements

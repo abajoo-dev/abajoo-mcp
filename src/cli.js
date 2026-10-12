@@ -1,7 +1,8 @@
-import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { spawnSync, spawn } from 'node:child_process';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -9,7 +10,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { atomicJson, initialize, readJson } from './config.js';
+import { atomicJson, initialize, readJson, dataDir } from './config.js';
 import { startServer } from './web.js';
 
 const executable = fileURLToPath(new URL('../bin/abj-odoo-mcp.js', import.meta.url));
@@ -43,10 +44,8 @@ async function secret(question) {
           process.stdin.off('data', handle);
           process.stdin.setRawMode(false);
           process.stdin.pause();
-          process.exitCode = 130;
           process.stdout.write('\n');
-          resolve('');
-          return;
+          process.exit(1);
         } else value += char;
       }
     };
@@ -54,15 +53,12 @@ async function secret(question) {
   });
 }
 
-function upstream(settings) {
-  return new StreamableHTTPClientTransport(new URL(settings.url), {
-    requestInit: { headers: { Authorization: `Bearer ${settings.token}` }, redirect: 'error' },
-  });
-}
-
 async function connectRemote(settings) {
-  const client = new Client({ name: 'abj-odoo-mcp-local', version: '0.1.0' });
-  await client.connect(upstream(settings));
+  const client = new Client({ name: connectionName, version: '0.1.0' }, { capabilities: {} });
+  const transport = new StreamableHTTPClientTransport(new URL(settings.url), {
+    requestInit: { headers: { Authorization: `Bearer ${settings.token}` } },
+  });
+  await client.connect(transport);
   return client;
 }
 
@@ -72,6 +68,52 @@ function commandFound(command) {
 
 function existing(command, args) {
   return spawnSync(command, args, { stdio: 'ignore', timeout: 5000 }).status === 0;
+}
+
+// Attempt to register Claude Desktop (direct JSON edit)
+async function registerClaudeDesktop() {
+  const configPaths = [
+    join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'), // macOS
+    join(homedir(), 'AppData', 'Roaming', 'Claude', 'claude_desktop_config.json'), // Windows
+    join(homedir(), '.config', 'Claude', 'claude_desktop_config.json'), // Linux
+  ];
+  for (const configPath of configPaths) {
+    if (!existsSync(configPath)) continue;
+    let config = {};
+    try { config = JSON.parse(await readFile(configPath, 'utf8')); } catch { config = {}; }
+    if (config?.mcpServers?.[connectionName]) return { name: 'Claude Desktop', skipped: true };
+    config.mcpServers = config.mcpServers || {};
+    config.mcpServers[connectionName] = {
+      command: process.execPath,
+      args: [executable, 'proxy'],
+    };
+    await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    return { name: 'Claude Desktop', configPath };
+  }
+  return null;
+}
+
+// Attempt to register Cursor (direct JSON edit)
+async function registerCursor() {
+  const configPaths = [
+    join(homedir(), 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
+    join(homedir(), '.cursor', 'mcp.json'),
+    join(homedir(), 'AppData', 'Roaming', 'Cursor', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
+  ];
+  for (const configPath of configPaths) {
+    if (!existsSync(configPath)) continue;
+    let config = {};
+    try { config = JSON.parse(await readFile(configPath, 'utf8')); } catch { config = {}; }
+    if (config?.mcpServers?.[connectionName]) return { name: 'Cursor', skipped: true };
+    config.mcpServers = config.mcpServers || {};
+    config.mcpServers[connectionName] = {
+      command: process.execPath,
+      args: [executable, 'proxy'],
+    };
+    await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    return { name: 'Cursor', configPath };
+  }
+  return null;
 }
 
 async function installedClients() {
@@ -118,7 +160,145 @@ export async function setup({ url, token, yes = false } = {}) {
     if (result.status === 0) console.log(`Registered: ${entry.name}`);
     else console.error(`${entry.name} registration failed: ${result.stderr?.trim() || result.error?.message || 'unknown error'}`);
   }
+  // also attempt direct JSON config clients
+  const desktop = await registerClaudeDesktop();
+  if (desktop && !desktop.skipped) console.log(`Registered: ${desktop.name} (${desktop.configPath})`);
+  const cursor = await registerCursor();
+  if (cursor && !cursor.skipped) console.log(`Registered: ${cursor.name} (${cursor.configPath})`);
   console.log('Restart your MCP clients to refresh tools. Existing MCP registrations were not replaced.');
+}
+
+// Create and load macOS LaunchAgent for local daemon mode
+async function daemonStart() {
+  if (platform() !== 'darwin') {
+    throw new Error('--daemon is only supported on macOS. On Linux/Windows, run: abj-odoo-mcp serve');
+  }
+  const label = 'com.abajoo.odoo-mcp';
+  const plistPath = join(homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+  const logDir = dataDir();
+  await mkdir(logDir, { recursive: true, mode: 0o700 });
+  const port = process.env.ABJ_PORT || '8090';
+  const host = process.env.ABJ_HOST || '127.0.0.1';
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${process.execPath}</string>
+        <string>${executable}</string>
+        <string>serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${join(executable, '..', '..')}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ABJ_DATA_DIR</key>
+        <string>${logDir}</string>
+        <key>ABJ_HOST</key>
+        <string>${host}</string>
+        <key>ABJ_PORT</key>
+        <string>${port}</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>Umask</key>
+    <integer>63</integer>
+    <key>StandardOutPath</key>
+    <string>${join(logDir, 'launchd.stdout.log')}</string>
+    <key>StandardErrorPath</key>
+    <string>${join(logDir, 'launchd.stderr.log')}</string>
+</dict>
+</plist>
+`;
+  await writeFile(plistPath, plist, 'utf8');
+  // Unload first if already loaded (ignore errors)
+  spawnSync('launchctl', ['bootout', `gui/${process.getuid()}/${label}`], { stdio: 'ignore' });
+  const result = spawnSync('launchctl', ['bootstrap', `gui/${process.getuid()}`, plistPath], { encoding: 'utf8', timeout: 10000 });
+  if (result.status !== 0) throw new Error(`launchctl bootstrap failed: ${result.stderr?.trim() || 'unknown'}`);
+  console.log(`Daemon started (LaunchAgent: ${label})`);
+  console.log(`Web UI: http://${host}:${port}`);
+  console.log(`MCP : http://${host}:${port}/mcp`);
+  return `http://${host}:${port}/mcp`;
+}
+
+async function daemonStop() {
+  if (platform() !== 'darwin') {
+    console.log('Stop command only works on macOS. Kill the process manually on other platforms.');
+    return;
+  }
+  const label = 'com.abajoo.odoo-mcp';
+  const result = spawnSync('launchctl', ['bootout', `gui/${process.getuid()}/${label}`], { encoding: 'utf8', timeout: 10000 });
+  if (result.status === 0) console.log('Daemon stopped.');
+  else console.error(`Stop failed: ${result.stderr?.trim() || 'already stopped'}`);
+}
+
+// quickstart: init (if needed) + daemon + register clients
+export async function quickstart({ yes = false } = {}) {
+  const port = process.env.ABJ_PORT || '8090';
+  const host = process.env.ABJ_HOST || '127.0.0.1';
+  const mcpUrl = `http://${host}:${port}/mcp`;
+
+  // 1. Init if no data yet
+  const settings = await readJson('client.json');
+  let token = settings?.token;
+  if (!token) {
+    console.log('\n=== ABJ Odoo MCP — First-time Setup ===\n');
+    const password = process.env.ABJ_ADMIN_PASSWORD || await secret('Set admin password (min. 6 chars, hidden): ');
+    token = await initialize(password);
+    console.log(`\n✓ Admin password set.`);
+    console.log(`✓ Master MCP Token: ${token}`);
+    console.log('  (Save this token; it will not be shown again)\n');
+  } else {
+    console.log('Existing configuration found — skipping init.');
+    token = settings.token;
+  }
+
+  // 2. Start daemon (macOS) or advise manual serve
+  if (platform() === 'darwin') {
+    await daemonStart();
+    // Wait up to 5s for server to be ready
+    for (let i = 0; i < 10; i++) {
+      try {
+        const r = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(500) });
+        if (r.ok) break;
+      } catch { /* not ready yet */ }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  } else {
+    console.log(`\nRun this in a separate terminal to start the server:`);
+    console.log(`  abj-odoo-mcp serve`);
+    console.log('Then re-run quickstart or run: abj-odoo-mcp setup\n');
+  }
+
+  // 3. Register proxy mode with all MCP clients
+  const newSettings = { url: mcpUrl, token };
+  await atomicJson('client.json', newSettings);
+
+  const clients = await installedClients();
+  if (clients.length) {
+    console.log(`\nRegistering with: ${clients.map((e) => e.name).join(', ')}`);
+    for (const entry of clients) {
+      const result = spawnSync(entry.command, entry.args, { encoding: 'utf8', timeout: 15000 });
+      if (result.status === 0) console.log(`  ✓ ${entry.name}`);
+      else console.error(`  ✗ ${entry.name}: ${result.stderr?.trim() || 'unknown error'}`);
+    }
+  }
+
+  const desktop = await registerClaudeDesktop();
+  if (desktop && !desktop.skipped) console.log(`  ✓ Claude Desktop`);
+  const cursor = await registerCursor();
+  if (cursor && !cursor.skipped) console.log(`  ✓ Cursor`);
+
+  console.log('\n=== Setup Complete ===');
+  console.log(`Web UI : http://${host}:${port}`);
+  console.log(`MCP URL: ${mcpUrl}`);
+  console.log(`Token  : ${token}`);
+  console.log('\nRestart your MCP clients (Claude Desktop, Codex, etc.) to apply changes.');
 }
 
 export async function proxy() {
@@ -132,7 +312,8 @@ export async function proxy() {
   catch (error) { await remote.close(); throw error; }
 }
 
-export async function main(args = process.argv.slice(2)) {
+export async function main() {
+  const args = process.argv.slice(2);
   switch (args[0]) {
     case 'init': {
       const password = process.env.ABJ_ADMIN_PASSWORD || await secret('New admin password (min. 6 characters): ');
@@ -142,8 +323,22 @@ export async function main(args = process.argv.slice(2)) {
       break;
     }
     case 'serve': await startServer(); break;
+    case 'start':
+    case 'quickstart': await quickstart({ yes: args.includes('--yes') }); break;
     case 'setup': await setup({ url: args[1], yes: args.includes('--yes') }); break;
+    case 'stop': await daemonStop(); break;
     case 'proxy': await proxy(); break;
-    default: console.log('Usage: abj-odoo-mcp init | serve | setup [MCP_URL] [--yes] | proxy');
+    default:
+      console.log('ABJ Odoo MCP — Standalone MCP middleware for Odoo\n');
+      console.log('Commands:');
+      console.log('  quickstart         First-time setup: init + daemon + register MCP clients');
+      console.log('  serve              Start the HTTP server (foreground)');
+      console.log('  stop               Stop the background daemon (macOS)');
+      console.log('  init               Initialize data store and generate master token');
+      console.log('  setup [URL]        Connect this device to a remote ABJ MCP server');
+      console.log('  proxy              Stdio-to-HTTP proxy (used by MCP clients)');
+      console.log('\nQuickstart on a new device:');
+      console.log('  npm install -g github:abajoo-dev/abajoo-mcp');
+      console.log('  abj-odoo-mcp quickstart');
   }
 }
