@@ -90,12 +90,14 @@ test('web setup, read-only generated tool, and authenticated MCP round trip', as
     }));
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 2);
-      assert.equal(tools[0].name, 'odoo_test_odoo_res_dpartner_search');
-      assert.equal(tools[1].name, 'odoo_test_odoo_res_dpartner_describe');
-      const described = await client.callTool({ name: tools[1].name, arguments: { prefix: 'na' } });
+      assert.ok(tools.length >= 2);
+      const searchTool = tools.find((t) => t.name === 'odoo_test_odoo_res_dpartner_search');
+      const describeTool = tools.find((t) => t.name === 'odoo_test_odoo_res_dpartner_describe');
+      assert.ok(searchTool);
+      assert.ok(describeTool);
+      const described = await client.callTool({ name: describeTool.name, arguments: { prefix: 'na' } });
       assert.deepEqual(JSON.parse(described.content[0].text), { name: { string: 'Name', type: 'char' } });
-      const result = await client.callTool({ name: tools[0].name, arguments: { fields: ['name'], limit: 2 } });
+      const result = await client.callTool({ name: searchTool.name, arguments: { fields: ['name'], limit: 2 } });
       assert.deepEqual(JSON.parse(result.content[0].text), [{ id: 7, name: 'Test Partner' }]);
       const activity = await fetch(`${appUrl}/admin/sessions`, { headers });
       assert.equal(activity.status, 200);
@@ -110,7 +112,7 @@ test('web setup, read-only generated tool, and authenticated MCP round trip', as
       const searchCall = calls.find((call) => call.body.limit === 2);
       assert.equal(searchCall.body.limit, 2);
       assert.equal(searchCall.authorization, 'bearer native-key');
-      assert.equal((await client.callTool({ name: tools[0].name, arguments: { fields: ['name'], limit: 1000 } })).isError, true);
+      assert.equal((await client.callTool({ name: searchTool.name, arguments: { fields: ['name'], limit: 1000 } })).isError, true);
     } finally { await client.close(); }
     await atomicJson('client.json', { url: `${appUrl}/mcp`, token });
     const proxyClient = new Client({ name: 'test-stdio-client', version: '1.0' });
@@ -121,8 +123,9 @@ test('web setup, read-only generated tool, and authenticated MCP round trip', as
     }));
     try {
       const { tools } = await proxyClient.listTools();
-      assert.equal(tools[0].name, 'odoo_test_odoo_res_dpartner_search');
-      const result = await proxyClient.callTool({ name: tools[0].name, arguments: { fields: ['name'] } });
+      const pSearch = tools.find((t) => t.name === 'odoo_test_odoo_res_dpartner_search');
+      assert.ok(pSearch);
+      const result = await proxyClient.callTool({ name: pSearch.name, arguments: { fields: ['name'] } });
       assert.deepEqual(JSON.parse(result.content[0].text), [{ id: 7, name: 'Test Partner' }]);
     } finally { await proxyClient.close(); }
     const remove = await fetch(`${appUrl}/admin/delete`, {

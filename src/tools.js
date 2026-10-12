@@ -106,26 +106,81 @@ export async function toolsList({ includeSystem = false } = {}) {
     }
 
     if (includeSystem) {
+      // 1. Model Discovery Tool (Search ir.model for any standard, custom, or Studio model)
+      tools.push({
+        name: `odoo_${connection.slug}_list_models`,
+        description: `Search & discover Odoo models on ${connection.slug} (including custom modules like abj_* and Odoo Studio models x_*). Use this whenever you need to find the technical model name for any business concept.`,
+        annotations: { readOnlyHint: true, destructiveHint: false },
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            query: { type: 'string', description: 'Keyword to search in model name or technical ID (e.g. "marketing", "timesheet", "tambak", "udang", "x_")' },
+            limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Max models to return (default 40)' },
+          },
+        },
+      });
+
+      // 2. Schema Inspector Tool (Inspect fields & relations on ANY model)
+      tools.push({
+        name: `odoo_${connection.slug}_describe_model`,
+        description: `Inspect fields, types, selection options, and relations on ANY model on ${connection.slug} (including custom & Studio fields x_studio_*).`,
+        annotations: { readOnlyHint: true, destructiveHint: false },
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            model: { type: 'string', description: 'Technical model name (e.g. abj.marketing.post, account.analytic.line, project.task, x_custom)' },
+          },
+          required: ['model'],
+        },
+      });
+
+      // 3. Universal Search/Read Tool (Read records from ANY model)
+      if (canRead) {
+        tools.push({
+          name: `odoo_${connection.slug}_search_read`,
+          description: `Universal search and read records from ANY allowed model in ${connection.slug}. Supports filtering, field projection, and pagination on all standard, custom, and Studio models.`,
+          annotations: { readOnlyHint: true, destructiveHint: false },
+          inputSchema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              model: { type: 'string', description: 'Technical model name to query' },
+              domain: { type: 'array', description: 'Odoo domain filter expression (e.g. [["state", "=", "draft"]])' },
+              fields: { type: 'array', items: { type: 'string' }, description: 'Fields to return (optional; defaults to basic fields)' },
+              limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max records (default 20, max 100)' },
+              offset: { type: 'integer', minimum: 0, description: 'Number of records to skip' },
+              order: { type: 'string', description: 'Sort order (e.g. "id desc")' },
+            },
+            required: ['model'],
+          },
+        });
+      }
+
+      // 4. Universal execute_kw Tool (ORM methods)
       tools.push({
         name: `odoo_${connection.slug}_execute_kw`,
-        description: `Execute ORM methods on any allowed model in ${connection.slug}. Supports search_read, search_count, fields_get${canCreate ? ', create' : ''}${canUpdate ? ', write' : ''}${canDelete ? ', unlink' : ''}. Use this to query models like account.analytic.line (timesheets), project.task, hr.employee, res.users, etc.`,
+        description: `Execute ORM methods on any allowed model in ${connection.slug}. Supports search_read, search_count, fields_get${canCreate ? ', create' : ''}${canUpdate ? ', write' : ''}${canDelete ? ', unlink' : ''}.`,
         annotations: { readOnlyHint: !canCreate && !canUpdate && !canDelete, destructiveHint: canDelete },
         inputSchema: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            model: { type: 'string', description: 'Technical model name (e.g. account.analytic.line, project.task, hr.employee, res.users)' },
+            model: { type: 'string', description: 'Technical model name' },
             method: {
               type: 'string',
               enum: ['search_read', 'search_count', 'fields_get', ...(canCreate ? ['create'] : []), ...(canUpdate ? ['write'] : []), ...(canDelete ? ['unlink'] : [])],
               description: 'ORM method to execute',
             },
-            args: { type: 'array', description: 'Positional arguments (e.g. [[[field, op, val]]] for search_read/search_count)' },
-            kwargs: { type: 'object', description: 'Keyword arguments (e.g. { fields: ["name", "unit_amount"], limit: 50 })' },
+            args: { type: 'array', description: 'Positional arguments' },
+            kwargs: { type: 'object', description: 'Keyword arguments' },
           },
           required: ['model', 'method'],
         },
       });
+
+      // 5. System Info Tool
       tools.push({
         name: systemToolName(connection, 'info'),
         description: `Get general system info on ${connection.slug}.`,
@@ -145,10 +200,19 @@ function validDomain(domain) {
 export async function callTool(name, args, config) {
   const connections = await listConnections();
 
-  // System and execute_kw tool handlers
+  // Universal and system tool handlers
   for (const connection of connections) {
     if (name === systemToolName(connection, 'info')) {
       return executeSystemInfo(connection, config);
+    }
+    if (name === `odoo_${connection.slug}_list_models`) {
+      return executeListModels(connection, args, config);
+    }
+    if (name === `odoo_${connection.slug}_describe_model`) {
+      return executeDescribeModel(connection, args, config);
+    }
+    if (name === `odoo_${connection.slug}_search_read`) {
+      return executeUniversalSearchRead(connection, args, config);
     }
     if (name === `odoo_${connection.slug}_execute_kw`) {
       return executeKw(connection, args, config);
@@ -312,3 +376,102 @@ async function executeKw(connection, args, config) {
   }
 }
 
+
+async function executeListModels(connection, args, config) {
+  const query = String(args?.query || '').trim();
+  const limit = Math.min(Math.max(Number(args?.limit) || 40, 1), 200);
+
+  const domain = [];
+  if (query) {
+    domain.push('|', ['model', 'ilike', query], ['name', 'ilike', query]);
+  }
+
+  try {
+    const records = await callOdoo(connection, config, 'ir.model', 'search_read', [domain], {
+      fields: ['model', 'name', 'state'],
+      limit,
+      order: 'model asc',
+    });
+
+    const filtered = (records || []).filter((r) => {
+      if (connection.excludeAccounting && isAccountingModel(r.model)) return false;
+      if (connection.excludePayroll && isPayrollModel(r.model)) return false;
+      return true;
+    });
+
+    return { content: [{ type: 'text', text: JSON.stringify(filtered) }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+}
+
+async function executeDescribeModel(connection, args, config) {
+  const model = String(args?.model || '').trim();
+  if (!model) {
+    return { isError: true, content: [{ type: 'text', text: 'Model is required' }] };
+  }
+
+  if (connection.excludeAccounting && isAccountingModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Accounting` }] };
+  }
+  if (connection.excludePayroll && isPayrollModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Payroll` }] };
+  }
+
+  try {
+    const fields = await callOdoo(connection, config, model, 'fields_get', [], {
+      attributes: ['string', 'type', 'relation', 'required', 'readonly', 'selection'],
+    });
+
+    const summary = {};
+    for (const [key, val] of Object.entries(fields || {})) {
+      summary[key] = {
+        label: val.string,
+        type: val.type,
+        ...(val.relation ? { relation: val.relation } : {}),
+        ...(val.required ? { required: true } : {}),
+        ...(val.readonly ? { readonly: true } : {}),
+        ...(Array.isArray(val.selection) ? { selection: val.selection.map(([k, label]) => `${k}:${label}`) } : {}),
+      };
+    }
+
+    return { content: [{ type: 'text', text: JSON.stringify(summary) }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+}
+
+async function executeUniversalSearchRead(connection, args, config) {
+  const model = String(args?.model || '').trim();
+  if (!model) {
+    return { isError: true, content: [{ type: 'text', text: 'Model is required' }] };
+  }
+  if (connection.canRead === false) {
+    return { isError: true, content: [{ type: 'text', text: 'Akses ditolak: Izin Read dinonaktifkan' }] };
+  }
+
+  if (connection.excludeAccounting && isAccountingModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Accounting` }] };
+  }
+  if (connection.excludePayroll && isPayrollModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Payroll` }] };
+  }
+
+  const domain = Array.isArray(args.domain) ? args.domain : [];
+  const fields = Array.isArray(args.fields) && args.fields.length ? args.fields : undefined;
+  const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
+  const offset = Number(args.offset) || 0;
+  const order = typeof args.order === 'string' ? args.order : undefined;
+
+  try {
+    const records = await callOdoo(connection, config, model, 'search_read', [domain], {
+      fields,
+      limit,
+      offset,
+      order,
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(records) }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+}
