@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "create-verification-skill": {
+      "source": "tester-army/e2e",
+      "sourceType": "github",
+      "skillPath": "skills/create-verification-skill/SKILL.md",
+      "computedHash": "f116527d971c85537cb128ceaaf7b9cada6e7c897ab71ed574b14d7bb535cacc"
+    },
+    "e2e": {
+      "source": "tester-army/e2e",
+      "sourceType": "github",
+      "skillPath": "skills/e2e/SKILL.md",
+      "computedHash": "cce961ab7399d9ac9313ba3c466a1deafedc4f974c50bc2b772f0b44053f9245"
+    }
+  }
+}
