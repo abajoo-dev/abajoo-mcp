@@ -61,7 +61,7 @@ export function validateConnection(input) {
     }
   }
 
-  if (!['auto', '17', '18', '19'].includes(String(input.version))) throw new Error('Supported Odoo versions: auto, 17, 18, 19');
+  if (!['auto', '14', '15', '16', '17', '18', '19'].includes(String(input.version))) throw new Error('Supported Odoo versions: auto, 14, 15, 16, 17, 18, 19');
   const url = new URL(String(input.url || ''));
   if (url.username || url.password || url.search || url.hash || url.pathname !== '/' || !['http:', 'https:'].includes(url.protocol)) {
     throw new Error('Odoo URL must be an HTTP(S) origin without path, credentials, query, or fragment');

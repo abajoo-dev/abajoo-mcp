@@ -119,7 +119,7 @@ export async function detectVersion(connection, config) {
     jsonrpc: '2.0', method: 'call', params: { service: 'common', method: 'version', args: [] }, id: 1,
   }, {}, true, { allowSelfSigned: connection.allowSelfSigned });
   const major = info?.server_version_info?.[0];
-  if (![17, 18].includes(major)) throw new Error(`Unsupported Odoo version or JSON-2 unavailable (detected ${String(major || 'unknown')})`);
+  if (![14, 15, 16, 17, 18].includes(major)) throw new Error(`Unsupported Odoo version or JSON-2 unavailable (detected ${String(major || 'unknown')})`);
   await probeOdoo({ ...connection, version: String(major) }, config);
   return String(major);
 }
