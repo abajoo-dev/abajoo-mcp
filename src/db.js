@@ -81,6 +81,10 @@ export function getDb() {
     CREATE INDEX IF NOT EXISTS idx_keys_hash ON api_keys(token_hash);
   `);
 
+  // Migrations for existing databases
+  try { db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT;"); } catch (_) {}
+  try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT;"); } catch (_) {}
+
   migrateLegacyActivity(db);
   dbInstance = db;
   return dbInstance;
@@ -362,9 +366,6 @@ function sanitizePayload(obj) {
   return clean;
 }
 
-  // Migrations
-  try { db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT"); } catch(_) {}
-  try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT"); } catch(_) {}
 
 // ─── User Management ────────────────────────────────────────────────────────
 

@@ -96,7 +96,7 @@ export function landingPage({ isLoggedIn = false } = {}) {
     <div class="nav-actions">
       ${isLoggedIn
         ? `<a class="btn btn-primary" href="/admin">Open Dashboard ➔</a>`
-        : `<a class="btn btn-secondary" href="/login">Sign in</a><a class="btn btn-primary" href="/admin">Dashboard ➔</a>`}
+        : `<a class="btn btn-secondary" href="/login">Sign in</a><a class="btn btn-primary" href="/register">Create Account ➔</a>`}
     </div>
   </nav>
 
@@ -107,8 +107,8 @@ export function landingPage({ isLoggedIn = false } = {}) {
     <h1>Connect AI Agents to <span class="gradient">Any Odoo Instance</span> Without Module Installation</h1>
     <p>Eksekusi Model Context Protocol mandiri berbasis native external API Odoo v17, v18, dan v19. Zero downtime, zero addon, aman dengan allowlist model & session audit.</p>
     <div class="hero-cta">
-      <a class="btn btn-primary" style="padding:12px 28px;font-size:1rem" href="/admin">Masuk Control Room</a>
-      <a class="btn btn-secondary" style="padding:12px 24px;font-size:1rem" href="#architecture">Lihat Arsitektur</a>
+      <a class="btn btn-primary" style="padding:12px 28px;font-size:1rem" href="/login">Masuk Control Room</a>
+      <a class="btn btn-secondary" style="padding:12px 24px;font-size:1rem" href="/register">+ Create Account</a>
     </div>
   </header>
 
@@ -790,15 +790,25 @@ export function registerPage({ csrf, error = '', notice = '' }) {
         <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Ulangi password">
       </div>
 
-      <button class="btn btn-primary" type="submit" style="width:100%;margin-top:8px">
-        <span>Create Account</span>
-        <span class="btn-arrow">→</span>
+      <button class="btn btn-primary" type="submit" style="width:100%;padding:13px;margin-top:16px;font-size:0.95rem;letter-spacing:0.02em">
+        Create Account ➔
       </button>
     </form>
 
-    <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-      <span style="color:var(--text-dim);font-size:0.88rem">Sudah punya akun? </span>
-      <a href="/login" style="color:var(--tosca);font-weight:600;font-size:0.88rem;text-decoration:none">Sign in →</a>
+    <div style="margin-top:20px;text-align:center">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="flex:1;height:1px;background:var(--border-subtle)"></div>
+        <span style="font-size:0.75rem;color:var(--text-dim);letter-spacing:0.05em">SUDAH PUNYA AKUN?</span>
+        <div style="flex:1;height:1px;background:var(--border-subtle)"></div>
+      </div>
+      <a href="/login" class="btn btn-secondary" style="display:block;width:100%;padding:12px;text-align:center;text-decoration:none;font-weight:600;font-size:0.9rem">
+        ← Sign in ke Akun
+      </a>
+    </div>
+
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;color:var(--text-dim)">
+      <a href="/" style="color:var(--tosca);text-decoration:none">← Beranda</a>
+      <span>Session 8 jam · AES-256</span>
     </div>
   </div>
 </body>
