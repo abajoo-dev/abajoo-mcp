@@ -124,8 +124,10 @@ export function validateConnection(input) {
   };
 }
 
-export async function listConnections() {
-  return (await readJson('connections.json')) || [];
+export async function listConnections(userId = null) {
+  const all = (await readJson('connections.json')) || [];
+  if (!userId || userId === 'admin') return all;
+  return all.filter((c) => c.userId === userId);
 }
 
 export async function saveConnection(input, config, { replace = false } = {}) {
@@ -134,7 +136,8 @@ export async function saveConnection(input, config, { replace = false } = {}) {
     const existing = await listConnections();
     const index = existing.findIndex((item) => item.slug === connection.slug);
     if (index >= 0 && !replace) throw new Error('Slug already exists; check Replace to update it');
-    const saved = { ...connection, apiKey: encrypt(connection.apiKey, config) };
+    if (index >= 0 && input.userId && existing[index].userId !== input.userId && input.userId !== 'admin') throw new Error('Tidak boleh mengubah koneksi milik user lain');
+    const saved = { ...connection, apiKey: encrypt(connection.apiKey, config), userId: input.userId || 'admin' };
     if (index < 0) existing.push(saved);
     else existing[index] = saved;
     await atomicJson('connections.json', existing);
@@ -142,10 +145,12 @@ export async function saveConnection(input, config, { replace = false } = {}) {
   });
 }
 
-export async function removeConnection(slug) {
+export async function removeConnection(slug, userId = null) {
   return serializeWrite(async () => {
     const existing = await listConnections();
-    if (!existing.some((item) => item.slug === slug)) throw new Error('Connection not found');
+    const conn = existing.find((item) => item.slug === slug);
+    if (!conn) throw new Error('Connection not found');
+    if (userId && userId !== 'admin' && conn.userId !== userId) throw new Error('Tidak boleh menghapus koneksi milik user lain');
     await atomicJson('connections.json', existing.filter((item) => item.slug !== slug));
   });
 }

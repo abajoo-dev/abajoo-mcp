@@ -16,9 +16,9 @@ export function systemToolName(connection, operation) {
   return `odoo_${connection.slug}_sys_${operation}`;
 }
 
-export async function toolsList({ includeSystem = false } = {}) {
+export async function toolsList({ includeSystem = false, userId = null } = {}) {
   const tools = [];
-  for (const connection of await listConnections()) {
+  for (const connection of await listConnections(userId)) {
     const canRead = connection.canRead !== false;
     const canCreate = Boolean(connection.canCreate);
     const canUpdate = Boolean(connection.canUpdate);
@@ -197,8 +197,8 @@ function validDomain(domain) {
     && domain.every((item) => typeof item === 'string' || (Array.isArray(item) && item.length === 3 && typeof item[0] === 'string'));
 }
 
-export async function callTool(name, args, config) {
-  const connections = await listConnections();
+export async function callTool(name, args, config, userId = null) {
+  const connections = await listConnections(userId);
 
   // Universal and system tool handlers
   for (const connection of connections) {

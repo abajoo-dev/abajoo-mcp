@@ -13,13 +13,22 @@ import {
   loginPage,
   logsPage,
   overviewPage,
+  registerPage,
   sessionsPage,
+  usersPage,
 } from './admin-ui.js';
 import {
   createApiKey,
   listApiKeys,
   revokeApiKey,
   authenticateKey,
+  authenticateUser,
+  createUser,
+  listUsers,
+  updateUser,
+  resetUserPassword,
+  deleteUser,
+  ensureAdminUser,
 } from './db.js';
 
 const css = await readFile(new URL('./admin.css', import.meta.url), 'utf8');
@@ -170,7 +179,9 @@ export function createApp(config, options = {}) {
 
       if (pathname === '/login' && ['GET', 'HEAD'].includes(req.method)) {
         if (currentAdmin(req)) return redirect(res, '/admin');
-        return respond(res, 200, loginPage({ csrf: config.csrfToken }), 'text/html; charset=utf-8');
+        const noticeKey = url.searchParams.get('notice');
+        const loginNotice = noticeKey === 'registered' ? 'Akun berhasil dibuat! Silakan sign in.' : '';
+        return respond(res, 200, loginPage({ csrf: config.csrfToken, notice: loginNotice }), 'text/html; charset=utf-8');
       }
 
       if (pathname === '/login' && req.method === 'POST') {
@@ -187,20 +198,57 @@ export function createApp(config, options = {}) {
           return respond(res, 429, loginPage({ csrf: config.csrfToken, error: 'Terlalu banyak percobaan login gagal. Coba lagi 1 menit.' }), 'text/html; charset=utf-8');
         }
         const expected = config || await readJson('server.json');
-        const ok = form.get('username') === 'admin' && equalHash(form.get('password'), expected.salt, expected.adminHash);
-        if (!ok) {
+        const inputUsername = form.get('username') || '';
+        const inputPassword = form.get('password') || '';
+        let sessionUser = null;
+        if (inputUsername === 'admin' && equalHash(inputPassword, expected.salt, expected.adminHash)) {
+          sessionUser = { id: 'admin', username: 'admin', email: 'admin@local', role: 'admin' };
+        } else {
+          const dbUser = authenticateUser(inputUsername, inputPassword);
+          if (dbUser) sessionUser = dbUser;
+        }
+        if (!sessionUser) {
           recent.push(Date.now());
           failedLogins.set(address, recent);
           return respond(res, 401, loginPage({ csrf: config.csrfToken, error: 'Username atau password salah.' }), 'text/html; charset=utf-8');
         }
         failedLogins.delete(address);
         const token = randomBytes(32).toString('base64url');
-        adminSessions.set(token, { expiresAt: Date.now() + sessionLifetimeMs, csrf: randomBytes(32).toString('base64url') });
+        adminSessions.set(token, { expiresAt: Date.now() + sessionLifetimeMs, csrf: randomBytes(32).toString('base64url'), user: sessionUser });
         for (const [key, value] of adminSessions) {
           if (value.expiresAt <= Date.now()) adminSessions.delete(key);
         }
         if (adminSessions.size > 100) adminSessions.delete(adminSessions.keys().next().value);
         return redirect(res, '/admin', { 'Set-Cookie': sessionCookie(req, token) });
+      }
+
+      if (pathname === '/register' && ['GET', 'HEAD'].includes(req.method)) {
+        if (currentAdmin(req)) return redirect(res, '/admin');
+        return respond(res, 200, registerPage({ csrf: config.csrfToken }), 'text/html; charset=utf-8');
+      }
+
+      if (pathname === '/register' && req.method === 'POST') {
+        if (!sameOrigin(req)) {
+          return respond(res, 403, registerPage({ csrf: config.csrfToken, error: 'Origin mismatch.' }), 'text/html; charset=utf-8');
+        }
+        const form = new URLSearchParams(await body(req));
+        if (form.get('csrf') !== config.csrfToken) {
+          return respond(res, 403, registerPage({ csrf: config.csrfToken, error: 'Invalid CSRF token.' }), 'text/html; charset=utf-8');
+        }
+        const regUsername = (form.get('username') || '').trim();
+        const regEmail = (form.get('email') || '').trim();
+        const regPassword = form.get('password') || '';
+        const regConfirm = form.get('confirmPassword') || '';
+        if (regPassword !== regConfirm) {
+          return respond(res, 400, registerPage({ csrf: config.csrfToken, error: 'Password dan konfirmasi tidak sama.' }), 'text/html; charset=utf-8');
+        }
+        try {
+          const newUser = createUser({ username: regUsername, email: regEmail, password: regPassword, role: 'user' });
+          createApiKey({ name: `${newUser.username} Default Key`, scope: 'crud_read', userId: newUser.id });
+          return redirect(res, '/login?notice=registered');
+        } catch (err) {
+          return respond(res, 400, registerPage({ csrf: config.csrfToken, error: err.message }), 'text/html; charset=utf-8');
+        }
       }
 
       if (pathname === '/logout' && req.method === 'POST') {
@@ -225,28 +273,36 @@ export function createApp(config, options = {}) {
         revoked: 'MCP session revoked.',
         key_created: 'New API Key generated successfully.',
         key_revoked: 'API Key revoked.',
+        user_pw_reset: 'Password user berhasil direset.',
+        user_updated: 'User berhasil diupdate.',
+        user_deleted: 'User berhasil dihapus.',
       };
       const notice = noticeMap[url.searchParams.get('notice')] || '';
 
+      const currentUser = admin.user || { id: 'admin', username: 'admin', email: 'admin@local', role: 'admin' };
+      const isAdminUser = currentUser.role === 'admin';
+
       if (req.method === 'GET') {
         await mcp.prune();
-        const connections = await listConnections();
+        const userId = isAdminUser ? null : currentUser.id;
+        const connections = await listConnections(userId);
         const { sessions, logs } = await listActivity();
 
         if (pathname === '/admin') {
-          const keys = listApiKeys();
-          return respond(res, 200, overviewPage({ connections, sessions, logs, keys, notice }), 'text/html; charset=utf-8');
+          const keys = listApiKeys(userId);
+          return respond(res, 200, overviewPage({ connections, sessions, logs, keys, notice, user: currentUser }), 'text/html; charset=utf-8');
         }
         if (pathname === '/admin/connections') {
-          return respond(res, 200, connectionsPage({ connections, csrf: admin.csrf, notice }), 'text/html; charset=utf-8');
+          const users = isAdminUser ? listUsers() : [];
+          return respond(res, 200, connectionsPage({ connections, csrf: admin.csrf, notice, user: currentUser, users }), 'text/html; charset=utf-8');
         }
         if (pathname === '/admin/keys') {
-          const keys = listApiKeys();
+          const keys = listApiKeys(userId);
           const tokenNotice = url.searchParams.get('token') || '';
-          return respond(res, 200, keysPage({ keys, csrf: admin.csrf, notice, tokenNotice }), 'text/html; charset=utf-8');
+          return respond(res, 200, keysPage({ keys, csrf: admin.csrf, notice, tokenNotice, user: currentUser }), 'text/html; charset=utf-8');
         }
         if (pathname === '/admin/sessions') {
-          return respond(res, 200, sessionsPage({ sessions, csrf: admin.csrf, notice }), 'text/html; charset=utf-8');
+          return respond(res, 200, sessionsPage({ sessions, csrf: admin.csrf, notice, user: currentUser }), 'text/html; charset=utf-8');
         }
         if (pathname === '/admin/logs') {
           const currentStatus = url.searchParams.get('status') || 'all';
@@ -261,7 +317,13 @@ export function createApp(config, options = {}) {
             currentStatus,
             searchQuery,
             notice,
+            user: currentUser,
           }), 'text/html; charset=utf-8');
+        }
+        if (pathname === '/admin/users') {
+          if (!isAdminUser) return respond(res, 403, 'Akses ditolak: hanya admin yang dapat mengakses halaman ini.');
+          const users = listUsers();
+          return respond(res, 200, usersPage({ users, csrf: admin.csrf, notice, user: currentUser }), 'text/html; charset=utf-8');
         }
         return respond(res, 404, 'Not found');
       }
@@ -271,6 +333,47 @@ export function createApp(config, options = {}) {
 
       const form = new URLSearchParams(await body(req));
       if (form.get('csrf') !== admin.csrf) return respond(res, 403, 'Invalid CSRF token');
+
+      // User management routes (admin-only)
+      if (pathname === '/admin/users/reset-password') {
+        if (!isAdminUser) return respond(res, 403, 'Akses ditolak');
+        const targetUserId = form.get('userId');
+        const newPassword = form.get('password') || '';
+        try {
+          resetUserPassword(targetUserId, newPassword);
+          return redirect(res, '/admin/users?notice=user_pw_reset');
+        } catch (err) {
+          const users = listUsers();
+          return respond(res, 400, usersPage({ users, csrf: admin.csrf, error: err.message, user: currentUser }), 'text/html; charset=utf-8');
+        }
+      }
+
+      if (pathname === '/admin/users/update') {
+        if (!isAdminUser) return respond(res, 403, 'Akses ditolak');
+        const targetUserId = form.get('userId');
+        const newEmail = form.get('email');
+        const newRole = form.get('role');
+        const newStatus = form.get('status');
+        try {
+          updateUser(targetUserId, { email: newEmail, role: newRole, status: newStatus });
+          return redirect(res, '/admin/users?notice=user_updated');
+        } catch (err) {
+          const users = listUsers();
+          return respond(res, 400, usersPage({ users, csrf: admin.csrf, error: err.message, user: currentUser }), 'text/html; charset=utf-8');
+        }
+      }
+
+      if (pathname === '/admin/users/delete') {
+        if (!isAdminUser) return respond(res, 403, 'Akses ditolak');
+        const targetUserId = form.get('userId');
+        try {
+          deleteUser(targetUserId);
+          return redirect(res, '/admin/users?notice=user_deleted');
+        } catch (err) {
+          const users = listUsers();
+          return respond(res, 400, usersPage({ users, csrf: admin.csrf, error: err.message, user: currentUser }), 'text/html; charset=utf-8');
+        }
+      }
 
       if (pathname === '/admin/sessions/revoke') {
         if (!(await mcp.revoke(form.get('id')))) return respond(res, 404, 'Active session not found');
@@ -283,7 +386,8 @@ export function createApp(config, options = {}) {
         const rateLimit = Number(form.get('rateLimit')) || 60;
         const ipAllowlist = form.get('ipAllowlist') || '';
         const expiresAt = form.get('expiresAt') || null;
-        const created = createApiKey({ name, scope, rateLimit, ipAllowlist, expiresAt });
+        const keyUserId = isAdminUser ? (form.get('userId') || 'admin') : currentUser.id;
+        const created = createApiKey({ name, scope, rateLimit, ipAllowlist, expiresAt, userId: keyUserId === 'admin' ? null : keyUserId });
         return redirect(res, `/admin/keys?token=${encodeURIComponent(created.token)}&notice=key_created`);
       }
 
@@ -295,7 +399,7 @@ export function createApp(config, options = {}) {
 
       if (pathname === '/admin/delete') {
         if (form.get('confirm') !== form.get('slug')) return respond(res, 400, 'Type the exact slug to remove');
-        await removeConnection(form.get('slug'));
+        await removeConnection(form.get('slug'), isAdminUser ? null : currentUser.id);
         return redirect(res, '/admin/connections?notice=removed');
       }
 
@@ -332,13 +436,18 @@ export function createApp(config, options = {}) {
           const version = validated.version === 'auto' ? await detectVersion(encrypted, serverConfig) : validated.version;
           await probeOdoo({ ...encrypted, version }, serverConfig);
           const replace = form.get('replace') === '1' || form.get('replace') === 'true';
+          const connUserId = isAdminUser ? (form.get('userId') || 'admin') : currentUser.id;
           await saveConnection({
             ...validated,
             version,
+            userId: connUserId,
           }, serverConfig, { replace });
           return redirect(res, '/admin/connections?notice=saved');
         } catch (err) {
-          const connections = await listConnections(); return respond(res, 400, connectionsPage({ connections, csrf: admin.csrf, error: err.message, formValues: raw }), 'text/html; charset=utf-8');
+          const connListUser = isAdminUser ? null : currentUser.id;
+          const connections = await listConnections(connListUser);
+          const users = isAdminUser ? listUsers() : [];
+          return respond(res, 400, connectionsPage({ connections, csrf: admin.csrf, error: err.message, formValues: raw, user: currentUser, users }), 'text/html; charset=utf-8');
         }
       }
 
@@ -354,6 +463,7 @@ export function createApp(config, options = {}) {
 export async function startServer(options = {}) {
   const config = await readJson('server.json');
   if (!config) throw new Error('Server not initialized. Run abj-odoo-mcp init first.');
+  ensureAdminUser({ salt: config.salt, adminHash: config.adminHash });
   const port = options.port ?? (process.env.ABJ_PORT ? Number(process.env.ABJ_PORT) : 8090);
   const host = options.host ?? (process.env.ABJ_HOST || '127.0.0.1');
   const app = createApp(config);

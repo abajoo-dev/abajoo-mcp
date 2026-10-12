@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
-import { dataDir, readJson } from './config.js';
+import { randomUUID, createHash, randomBytes } from 'node:crypto';
+import { dataDir, readJson, hashSecret, equalHash } from './config.js';
 
 let dbInstance = null;
 
@@ -28,12 +28,14 @@ export function getDb() {
       expires_at TEXT,
       created_at TEXT NOT NULL,
       last_used_at TEXT,
-      revoked_at TEXT
+      revoked_at TEXT,
+      user_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       api_key_id TEXT,
+      user_id TEXT,
       client_name TEXT NOT NULL DEFAULT 'unknown',
       client_version TEXT DEFAULT '',
       remote_ip TEXT NOT NULL DEFAULT 'unknown',
@@ -43,6 +45,18 @@ export function getDb() {
       last_activity_at TEXT NOT NULL,
       ended_at TEXT,
       FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS tool_logs (
@@ -108,7 +122,7 @@ export function hashToken(token) {
   return createHash('sha256').update(String(token).trim()).digest('hex');
 }
 
-export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllowlist = '', expiresAt = null }) {
+export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllowlist = '', expiresAt = null, userId = null }) {
   const db = getDb();
   const id = randomUUID();
   const rawSecret = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
@@ -118,17 +132,25 @@ export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllo
   const created_at = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO api_keys (id, name, prefix, token_hash, scope, rate_limit, ip_allowlist, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, String(name || 'Default Key').trim(), prefix, token_hash, scope, Number(rateLimit) || 60, String(ipAllowlist || '').trim(), expiresAt || null, created_at);
+    INSERT INTO api_keys (id, name, prefix, token_hash, scope, rate_limit, ip_allowlist, expires_at, created_at, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, String(name || 'Default Key').trim(), prefix, token_hash, scope, Number(rateLimit) || 60, String(ipAllowlist || '').trim(), expiresAt || null, created_at, userId || null);
 
-  return { id, name, prefix, token, scope, rateLimit, expiresAt, created_at };
+  return { id, name, prefix, token, scope, rateLimit, expiresAt, created_at, userId };
 }
 
-export function listApiKeys() {
+export function listApiKeys(userId = null) {
   const db = getDb();
+  if (userId) {
+    return db.prepare(`
+      SELECT id, name, prefix, scope, rate_limit, ip_allowlist, expires_at, created_at, last_used_at, revoked_at, user_id
+      FROM api_keys
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `).all(userId);
+  }
   return db.prepare(`
-    SELECT id, name, prefix, scope, rate_limit, ip_allowlist, expires_at, created_at, last_used_at, revoked_at
+    SELECT id, name, prefix, scope, rate_limit, ip_allowlist, expires_at, created_at, last_used_at, revoked_at, user_id
     FROM api_keys
     ORDER BY created_at DESC
   `).all();
@@ -146,7 +168,7 @@ export function authenticateKey(token, remoteIp = '') {
   const db = getDb();
   const hashed = hashToken(token);
   const row = db.prepare(`
-    SELECT id, name, prefix, scope, rate_limit, ip_allowlist, expires_at, revoked_at
+    SELECT id, name, prefix, scope, rate_limit, ip_allowlist, expires_at, revoked_at, user_id
     FROM api_keys
     WHERE token_hash = ?
   `).get(hashed);
@@ -339,3 +361,96 @@ function sanitizePayload(obj) {
   }
   return clean;
 }
+
+  // Migrations
+  try { db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT"); } catch(_) {}
+  try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT"); } catch(_) {}
+
+// ─── User Management ────────────────────────────────────────────────────────
+
+export function createUser({ username, email, password, role = 'user' }) {
+  const db = getDb();
+  username = String(username || '').trim().toLowerCase();
+  email = String(email || '').trim().toLowerCase();
+  if (!username || username.length < 3) throw new Error('Username minimal 3 karakter');
+  if (!/^[a-z0-9_.-]+$/.test(username)) throw new Error('Username hanya boleh huruf kecil, angka, _ . -');
+  if (!email.includes('@')) throw new Error('Email tidak valid');
+  if (!password || password.length < 6) throw new Error('Password minimal 6 karakter');
+  const id = randomUUID();
+  const salt = randomBytes(16).toString('hex');
+  const password_hash = hashSecret(password, salt);
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO users (id, username, email, password_hash, salt, role, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(id, username, email, password_hash, salt, role, 'active', now, now);
+  return { id, username, email, role, status: 'active' };
+}
+
+export function authenticateUser(usernameOrEmail, password) {
+  const db = getDb();
+  const query = usernameOrEmail.includes('@') ? 'email' : 'username';
+  const row = db.prepare(`SELECT * FROM users WHERE ${query} = ? COLLATE NOCASE`).get(usernameOrEmail.trim().toLowerCase());
+  if (!row) return null;
+  if (row.status !== 'active') return null;
+  if (!equalHash(password, row.salt, row.password_hash)) return null;
+  return { id: row.id, username: row.username, email: row.email, role: row.role, status: row.status };
+}
+
+export function listUsers() {
+  const db = getDb();
+  return db.prepare('SELECT id, username, email, role, status, created_at, updated_at FROM users ORDER BY created_at DESC').all();
+}
+
+export function getUserById(id) {
+  const db = getDb();
+  return db.prepare('SELECT id, username, email, role, status, created_at, updated_at FROM users WHERE id = ?').get(id);
+}
+
+export function updateUser(id, { email, role, status }) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const row = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+  if (!row) throw new Error('User tidak ditemukan');
+  if (email !== undefined) {
+    email = String(email).trim().toLowerCase();
+    if (!email.includes('@')) throw new Error('Email tidak valid');
+    db.prepare('UPDATE users SET email = ?, updated_at = ? WHERE id = ?').run(email, now, id);
+  }
+  if (role !== undefined) {
+    if (!['admin', 'user'].includes(role)) throw new Error('Role tidak valid');
+    db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?').run(role, now, id);
+  }
+  if (status !== undefined) {
+    if (!['active', 'disabled'].includes(status)) throw new Error('Status tidak valid');
+    db.prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+  }
+  return getUserById(id);
+}
+
+export function resetUserPassword(id, newPassword) {
+  const db = getDb();
+  if (!newPassword || newPassword.length < 6) throw new Error('Password minimal 6 karakter');
+  const salt = randomBytes(16).toString('hex');
+  const password_hash = hashSecret(newPassword, salt);
+  const now = new Date().toISOString();
+  const result = db.prepare('UPDATE users SET password_hash = ?, salt = ?, updated_at = ? WHERE id = ?').run(password_hash, salt, now, id);
+  if (!result.changes) throw new Error('User tidak ditemukan');
+}
+
+export function deleteUser(id) {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  if (!result.changes) throw new Error('User tidak ditemukan');
+}
+
+export function ensureAdminUser({ salt, adminHash }) {
+  const db = getDb();
+  const existing = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  if (existing) return;
+  const now = new Date().toISOString();
+  const id = randomUUID();
+  db.prepare(
+    'INSERT OR IGNORE INTO users (id, username, email, password_hash, salt, role, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(id, 'admin', 'admin@local', adminHash, salt, 'admin', 'active', now, now);
+}
+

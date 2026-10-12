@@ -7,14 +7,17 @@ function escape(value) {
 const date = (value) => value ? escape(new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })) : '—';
 const empty = (title, detail) => `<div class="empty" style="text-align:center;padding:48px 16px;color:var(--text-dim)"><strong style="display:block;font-size:1.1rem;color:var(--text-muted);margin-bottom:6px">${escape(title)}</strong><p style="font-size:0.9rem">${escape(detail)}</p></div>`;
 
-function layout(title, content, { active = 'overview', notice = '', error = '', tokenNotice = '' } = {}) {
-  const nav = [
+function layout(title, content, { active = 'overview', notice = '', error = '', tokenNotice = '', user = null } = {}) {
+  const isAdmin = !user || user.role === 'admin';
+  const navItems = [
     ['overview', '/admin', 'Overview', '01'],
     ['connections', '/admin/connections', 'Connections', '02'],
     ['keys', '/admin/keys', 'API Keys', '03'],
     ['sessions', '/admin/sessions', 'Sessions', '04'],
     ['logs', '/admin/logs', 'Tool logs', '05'],
-  ].map(([key, href, label, number]) =>
+  ];
+  if (isAdmin) navItems.push(['users', '/admin/users', 'Users', '06']);
+  const nav = navItems.map(([key, href, label, number]) =>
     `<a class="nav-item ${active === key ? 'active' : ''}" href="${href}"><span>${label}</span><small>${number}</small></a>`
   ).join('');
 
@@ -41,6 +44,7 @@ function layout(title, content, { active = 'overview', notice = '', error = '', 
       </nav>
       <div class="sidebar-footer">
         <span class="status-indicator"><span class="badge badge-success" style="padding:2px 6px">ONLINE</span> v0.2</span>
+        ${user ? `<div style="font-size:0.75rem;color:var(--text-dim);margin:6px 0 4px;line-height:1.3"><strong style="color:var(--text-muted)">${escape(user.username)}</strong> <span class="badge ${user.role === 'admin' ? 'badge-warning' : 'badge-info'}" style="font-size:0.68rem;padding:1px 5px">${user.role.toUpperCase()}</span></div>` : ''}
         <form action="/logout" method="post" style="display:inline">
           <button class="btn btn-secondary btn-sm" type="submit">Sign out</button>
         </form>
@@ -179,7 +183,7 @@ export function landingPage({ isLoggedIn = false } = {}) {
    LOGIN PAGE
    ========================================================================= */
 
-export function loginPage({ csrf, error = '' }) {
+export function loginPage({ csrf, error = '', notice = '' }) {
   return `<!doctype html>
 <html lang="id">
 <head>
@@ -195,6 +199,12 @@ export function loginPage({ csrf, error = '' }) {
       <h2>ABJ Odoo MCP</h2>
       <p>Sign in to your internal integration control room</p>
     </div>
+
+    ${notice ? `
+      <div class="alert alert-success" role="alert" style="margin-bottom:24px;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.1rem">✓</span>
+        <span style="font-size:0.88rem;line-height:1.4">${escape(notice)}</span>
+      </div>` : ''}
 
     ${error ? `
       <div class="alert alert-danger" role="alert" style="margin-bottom:24px;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px">
@@ -256,7 +266,7 @@ export function loginPage({ csrf, error = '' }) {
    OVERVIEW PAGE
    ========================================================================= */
 
-export function overviewPage({ connections, sessions, logs, keys = [], notice, error }) {
+export function overviewPage({ connections, sessions, logs, keys = [], notice, error, user = null }) {
   const activeSessions = sessions.filter((s) => s.state === 'active').length;
   const activeKeys = keys.filter((k) => !k.revoked_at).length;
   const totalCalls = logs.length;
@@ -342,14 +352,14 @@ export function overviewPage({ connections, sessions, logs, keys = [], notice, e
           </table>
         </div>` : empty('Belum ada aktivitas', 'Log pemanggilan tool akan muncul di sini setelah AI client mulai memanggil tools.')}
     </div>
-  `, { active: 'overview', notice, error });
+  `, { active: 'overview', notice, error, user });
 }
 
 /* =========================================================================
    CONNECTIONS PAGE
    ========================================================================= */
 
-export function connectionsPage({ connections, csrf, notice, error, formValues = {} }) {
+export function connectionsPage({ connections, csrf, notice, error, formValues = {}, user = null, users = [] }) {
   const rows = connections.map((c) => `
     <tr>
       <td><strong>${escape(c.slug)}</strong></td>
@@ -367,6 +377,7 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
         </div>
         <div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px">${c.models.length} core models terdaftar</div>
       </td>
+      ${user && user.role === 'admin' ? `<td><span class="badge ${c.userId && c.userId !== 'admin' ? 'badge-info' : 'badge-warning'}">${escape(c.userId || 'admin')}</span></td>` : ''}
       <td>
         <details>
           <summary class="btn btn-danger btn-sm" style="display:inline-block;cursor:pointer">Remove</summary>
@@ -523,14 +534,14 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
         <button class="btn btn-primary" type="submit">Test &amp; Save Connection ➔</button>
       </form>
     </div>
-  `, { active: 'connections', notice, error });
+  `, { active: 'connections', notice, error, user });
 }
 
 /* =========================================================================
    API KEYS PAGE (NEW FEATURE)
    ========================================================================= */
 
-export function keysPage({ keys, csrf, notice, error, tokenNotice }) {
+export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }) {
   const rows = keys.map((k) => `
     <tr>
       <td><strong>${escape(k.name)}</strong></td>
@@ -609,14 +620,14 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice }) {
         <button class="btn btn-primary" type="submit">Generate API Key ➔</button>
       </form>
     </div>
-  `, { active: 'keys', notice, error, tokenNotice });
+  `, { active: 'keys', notice, error, tokenNotice, user });
 }
 
 /* =========================================================================
    SESSIONS PAGE
    ========================================================================= */
 
-export function sessionsPage({ sessions, csrf, notice, error }) {
+export function sessionsPage({ sessions, csrf, notice, error, user = null }) {
   const rows = sessions.map((s) => `
     <tr>
       <td>
@@ -664,14 +675,14 @@ export function sessionsPage({ sessions, csrf, notice, error }) {
           </table>
         </div>` : empty('Belum ada sesi tercatat', 'Sesi akan tercatat ketika AI client melakukan handshaking MCP ke /mcp.')}
     </div>
-  `, { active: 'sessions', notice, error });
+  `, { active: 'sessions', notice, error, user });
 }
 
 /* =========================================================================
    TOOL LOGS PAGE
    ========================================================================= */
 
-export function logsPage({ logs, sessions, currentStatus = 'all', searchQuery = '', notice, error }) {
+export function logsPage({ logs, sessions, currentStatus = 'all', searchQuery = '', notice, error, user = null }) {
   const rows = logs.map((l) => `
     <tr>
       <td style="white-space:nowrap">${date(l.calledAt || l.called_at)}</td>
@@ -723,5 +734,165 @@ export function logsPage({ logs, sessions, currentStatus = 'all', searchQuery = 
           </table>
         </div>` : empty('Belum ada log sesuai filter', 'Log pemanggilan tool akan muncul di sini.')}
     </div>
-  `, { active: 'logs', notice, error });
+  `, { active: 'logs', notice, error, user });
+}
+
+export function registerPage({ csrf, error = '', notice = '' }) {
+  return `<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Account · ABJ Odoo MCP</title>
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-header">
+      <span class="mark">A</span>
+      <h2>Create Account</h2>
+      <p>Register to manage your isolated Odoo MCP connections</p>
+    </div>
+
+    ${notice ? `
+      <div class="alert alert-success" role="alert" style="margin-bottom:24px;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.1rem">✓</span>
+        <span style="font-size:0.88rem;line-height:1.4">${escape(notice)}</span>
+      </div>` : ''}
+
+    ${error ? `
+      <div class="alert alert-danger" role="alert" style="margin-bottom:24px;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.1rem">⚠</span>
+        <span style="font-size:0.88rem;line-height:1.4">${escape(error)}</span>
+      </div>` : ''}
+
+    <form action="/register" method="post" autocomplete="on">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
+
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus placeholder="contoh: budi_dev" pattern="^[a-zA-Z0-9_.-]{3,30}$" title="Minimal 3 karakter, huruf, angka, _, ., -">
+        <small style="color:var(--text-dim);font-size:0.75rem;margin-top:3px;display:block">Digunakan untuk login dan prefix API key</small>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required placeholder="nama@abajoo.co.id">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Minimal 6 karakter">
+      </div>
+
+      <div class="form-group">
+        <label for="confirmPassword">Konfirmasi Password</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Ulangi password">
+      </div>
+
+      <button class="btn btn-primary" type="submit" style="width:100%;margin-top:8px">
+        <span>Create Account</span>
+        <span class="btn-arrow">→</span>
+      </button>
+    </form>
+
+    <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <span style="color:var(--text-dim);font-size:0.88rem">Sudah punya akun? </span>
+      <a href="/login" style="color:var(--tosca);font-weight:600;font-size:0.88rem;text-decoration:none">Sign in →</a>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function usersPage({ users = [], csrf, notice = '', error = '', user = null }) {
+  const rows = users.map((u) => `
+    <tr>
+      <td><strong>${escape(u.username)}</strong></td>
+      <td>${escape(u.email)}</td>
+      <td><span class="badge ${u.role === 'admin' ? 'badge-warning' : 'badge-info'}">${escape(u.role)}</span></td>
+      <td><span class="badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}">${escape(u.status)}</span></td>
+      <td>${date(u.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <!-- Reset Password -->
+          <details>
+            <summary class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Reset PW</summary>
+            <form action="/admin/users/reset-password" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
+              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="userId" value="${escape(u.id)}">
+              <div class="form-group" style="margin-bottom:8px">
+                <label style="font-size:0.75rem">Password baru</label>
+                <input name="password" type="password" minlength="6" required placeholder="Min 6 karakter" style="margin-top:4px">
+              </div>
+              <button class="btn btn-primary btn-sm" type="submit" style="width:100%">Reset Password</button>
+            </form>
+          </details>
+          <!-- Edit User -->
+          <details>
+            <summary class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Edit</summary>
+            <form action="/admin/users/update" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
+              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="userId" value="${escape(u.id)}">
+              <div class="form-group" style="margin-bottom:8px">
+                <label style="font-size:0.75rem">Email</label>
+                <input name="email" type="email" value="${escape(u.email)}" required style="margin-top:4px">
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label style="font-size:0.75rem">Role</label>
+                <select name="role" style="margin-top:4px;width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-main)">
+                  <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
+                  <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label style="font-size:0.75rem">Status</label>
+                <select name="status" style="margin-top:4px;width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-main)">
+                  <option value="active" ${u.status === 'active' ? 'selected' : ''}>active</option>
+                  <option value="disabled" ${u.status === 'disabled' ? 'selected' : ''}>disabled</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" type="submit" style="width:100%">Update User</button>
+            </form>
+          </details>
+          <!-- Delete User -->
+          <details>
+            <summary class="btn btn-danger btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Delete</summary>
+            <form action="/admin/users/delete" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
+              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="userId" value="${escape(u.id)}">
+              <p style="font-size:0.82rem;margin:0 0 8px;color:var(--danger)">Yakin hapus user <strong>${escape(u.username)}</strong>? Koneksi milik user ini tidak ikut terhapus.</p>
+              <button class="btn btn-danger btn-sm" type="submit" style="width:100%">Hapus Permanen</button>
+            </form>
+          </details>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  return layout('Users', `
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0 0 2px">Registered Users</h2>
+          <small style="color:var(--text-dim)">${users.length} akun terdaftar</small>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;overflow-x:auto">
+        ${users.length === 0 ? empty('Belum ada user', 'User yang register via /register akan muncul di sini.') : `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th style="min-width:200px">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`}
+      </div>
+    </div>
+  `, { active: 'users', notice, error, user });
 }

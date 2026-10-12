@@ -5,11 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { callTool, toolsList } from './tools.js';
 import { closeSession, openSession, recordToolCall, touchSession } from './activity.js';
 
-export function buildServer(config, { onToolCall, apiKey = null } = {}) {
+export function buildServer(config, { onToolCall, apiKey = null, userId = null } = {}) {
   const server = new Server({ name: 'abj-odoo-mcp', version: '0.1.0' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const includeSystem = apiKey ? apiKey.scope === 'admin' || apiKey.scope === 'config_read' : false;
-    return { tools: await toolsList({ includeSystem }) };
+    return { tools: await toolsList({ includeSystem, userId }) };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -18,7 +18,7 @@ export function buildServer(config, { onToolCall, apiKey = null } = {}) {
     let errorMessage = null;
     let resultSummary = null;
     try {
-      const result = await callTool(request.params.name, request.params.arguments || {}, config);
+      const result = await callTool(request.params.name, request.params.arguments || {}, config, userId);
       status = result.isError ? 'error' : 'success';
       if (result.isError) {
         errorMessage = result.content?.[0]?.text;
@@ -99,8 +99,10 @@ export function createMcpRouter(config, { idleTimeoutMs = 60 * 60 * 1000 } = {})
       });
       activeTransport = transport;
 
+      const resolvedUserId = (authContext.isMaster || authContext.apiKey?.scope === 'admin') ? null : (authContext.apiKey?.user_id || null);
       const server = buildServer(config, {
         apiKey: authContext.apiKey || null,
+        userId: resolvedUserId,
         onToolCall: (toolName, status, durationMs, params, errorMsg, summary) => {
           if (!activeSessionId) return;
           return recordToolCall({
