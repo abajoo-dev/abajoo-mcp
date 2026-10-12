@@ -107,6 +107,26 @@ export async function toolsList({ includeSystem = false } = {}) {
 
     if (includeSystem) {
       tools.push({
+        name: `odoo_${connection.slug}_execute_kw`,
+        description: `Execute ORM methods on any allowed model in ${connection.slug}. Supports search_read, search_count, fields_get${canCreate ? ', create' : ''}${canUpdate ? ', write' : ''}${canDelete ? ', unlink' : ''}. Use this to query models like account.analytic.line (timesheets), project.task, hr.employee, res.users, etc.`,
+        annotations: { readOnlyHint: !canCreate && !canUpdate && !canDelete, destructiveHint: canDelete },
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            model: { type: 'string', description: 'Technical model name (e.g. account.analytic.line, project.task, hr.employee, res.users)' },
+            method: {
+              type: 'string',
+              enum: ['search_read', 'search_count', 'fields_get', ...(canCreate ? ['create'] : []), ...(canUpdate ? ['write'] : []), ...(canDelete ? ['unlink'] : [])],
+              description: 'ORM method to execute',
+            },
+            args: { type: 'array', description: 'Positional arguments (e.g. [[[field, op, val]]] for search_read/search_count)' },
+            kwargs: { type: 'object', description: 'Keyword arguments (e.g. { fields: ["name", "unit_amount"], limit: 50 })' },
+          },
+          required: ['model', 'method'],
+        },
+      });
+      tools.push({
         name: systemToolName(connection, 'info'),
         description: `Get general system info on ${connection.slug}.`,
         annotations: { readOnlyHint: true, destructiveHint: false },
@@ -125,10 +145,13 @@ function validDomain(domain) {
 export async function callTool(name, args, config) {
   const connections = await listConnections();
 
-  // System tool handler
+  // System and execute_kw tool handlers
   for (const connection of connections) {
     if (name === systemToolName(connection, 'info')) {
       return executeSystemInfo(connection, config);
+    }
+    if (name === `odoo_${connection.slug}_execute_kw`) {
+      return executeKw(connection, args, config);
     }
   }
 
@@ -256,3 +279,36 @@ async function executeSystemInfo(connection, config) {
     return { isError: true, content: [{ type: 'text', text: `Failed to fetch system info: ${error.message}` }] };
   }
 }
+
+async function executeKw(connection, args, config) {
+  const { model, method, args: ormArgs = [], kwargs: ormKwargs = {} } = args || {};
+  if (!model || !method) {
+    return { isError: true, content: [{ type: 'text', text: 'Model and method are required' }] };
+  }
+
+  // Security checks
+  if (connection.excludeAccounting && isAccountingModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Accounting` }] };
+  }
+  if (connection.excludePayroll && isPayrollModel(model)) {
+    return { isError: true, content: [{ type: 'text', text: `Akses ditolak: Model '${model}' diblokir oleh opsi Exclude Payroll` }] };
+  }
+
+  if (method === 'create' && !connection.canCreate) {
+    return { isError: true, content: [{ type: 'text', text: 'Akses ditolak: Operasi Create tidak diizinkan' }] };
+  }
+  if (method === 'write' && !connection.canUpdate) {
+    return { isError: true, content: [{ type: 'text', text: 'Akses ditolak: Operasi Update tidak diizinkan' }] };
+  }
+  if (method === 'unlink' && !connection.canDelete) {
+    return { isError: true, content: [{ type: 'text', text: 'Akses ditolak: Operasi Delete tidak diizinkan' }] };
+  }
+
+  try {
+    const result = await callOdoo(connection, config, model, method, ormArgs, ormKwargs);
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+}
+

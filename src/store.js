@@ -1,18 +1,26 @@
 import { atomicJson, decrypt, encrypt, readJson } from './config.js';
 
-export const isAccountingModel = (model) => /^account(\.|\b)/i.test(String(model || '').trim());
+export const isAccountingModel = (model) => {
+  const m = String(model || '').trim().toLowerCase();
+  if (m.startsWith('account.analytic.')) return false;
+  return /^account(\.|\b)/i.test(m);
+};
 export const isPayrollModel = (model) => /^hr\.(payslip|payroll|salary|contract)(\.|\b)/i.test(String(model || '').trim());
 
 export const DEFAULT_CORE_MODELS = [
   'res.partner',
-  'product.template',
-  'product.product',
+  'res.users',
+  'project.project',
+  'project.task',
+  'account.analytic.line',
+  'hr.employee',
+  'hr.department',
+  'crm.lead',
   'sale.order',
   'purchase.order',
   'stock.picking',
-  'crm.lead',
-  'project.task',
-  'hr.employee',
+  'product.template',
+  'product.product',
   'account.move',
   'account.payment',
   'hr.payslip',

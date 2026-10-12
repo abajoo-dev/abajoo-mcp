@@ -144,7 +144,7 @@ export function createApp(config, options = {}) {
         const token = match[1];
         let authContext = {};
         if (verifyToken(token, config)) {
-          authContext = { isMaster: true, apiKey: { id: null, scope: 'crud_read', name: 'Master Token' } };
+          authContext = { isMaster: true, apiKey: { id: null, scope: 'admin', name: 'Master Token' } };
         } else {
           const authResult = authenticateKey(token, req.socket.remoteAddress);
           if (!authResult || !authResult.valid) {
@@ -318,7 +318,7 @@ export function createApp(config, options = {}) {
             login: raw.login,
             apiKey: raw.apiKey,
             version: raw.version || 'auto',
-            models: raw.models ? raw.models.split(/[\s,]+/).filter(Boolean) : ['res.partner'],
+            models: raw.models ? raw.models.split(/[\s,]+/).filter(Boolean) : undefined,
             canCreate,
             canRead,
             canUpdate,

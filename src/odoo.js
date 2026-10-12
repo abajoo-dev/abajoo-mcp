@@ -64,7 +64,7 @@ async function request(url, body, headers = {}, wrapped = false, options = {}) {
 }
 
 export async function callOdoo(connection, config, model, method, args = [], kwargs = {}) {
-  if (!['context_get', 'search_read', 'fields_get', 'create', 'write', 'unlink'].includes(method)) {
+  if (!['context_get', 'search_read', 'search_count', 'fields_get', 'create', 'write', 'unlink'].includes(method)) {
     throw new Error('Method not allowed');
   }
 
@@ -79,7 +79,7 @@ export async function callOdoo(connection, config, model, method, args = [], kwa
   const key = getApiKey(connection, config);
   if (connection.version === '19') {
     const parameters = method === 'context_get' ? {}
-      : method === 'search_read' ? { domain: args[0], ...kwargs }
+      : method === 'search_read' || method === 'search_count' ? { domain: args[0], ...kwargs }
       : method === 'create' ? { values: args[0] || kwargs.values || kwargs, ...kwargs }
       : method === 'write' ? { ids: args[0], values: args[1] || kwargs.values, ...kwargs }
       : method === 'unlink' ? { ids: args[0], ...kwargs }
