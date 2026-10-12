@@ -136,11 +136,21 @@ async function installedClients() {
   return found;
 }
 
+function isPrivateHost(hostname) {
+  if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
+  return false;
+}
+
 export async function setup({ url, token, yes = false } = {}) {
   const endpoint = url || await ask('Middleware MCP URL (https://.../mcp): ');
   const parsed = new URL(endpoint);
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname))) {
-    throw new Error('Remote MCP URL must use HTTPS; HTTP is allowed only on loopback');
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateHost(parsed.hostname))) {
+    throw new Error('Remote MCP URL must use HTTPS (HTTP is allowed only on loopback, LAN, or Tailscale)');
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash || !parsed.pathname.endsWith('/mcp')) throw new Error('URL must end with /mcp and contain no credentials, query, or fragment');
   const accessToken = token || process.env.ABJ_MCP_TOKEN || await secret('MCP access token (hidden): ');
