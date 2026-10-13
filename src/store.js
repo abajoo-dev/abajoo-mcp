@@ -137,7 +137,9 @@ export async function saveConnection(input, config, { replace = false } = {}) {
     const index = existing.findIndex((item) => item.slug === connection.slug);
     if (index >= 0 && !replace) throw new Error('Slug already exists; check Replace to update it');
     if (index >= 0 && input.userId && existing[index].userId !== input.userId && input.userId !== 'admin') throw new Error('Tidak boleh mengubah koneksi milik user lain');
-    const saved = { ...connection, apiKey: encrypt(connection.apiKey, config), userId: input.userId || 'admin' };
+    
+    const isAlreadyEncrypted = typeof connection.apiKey === 'string' && connection.apiKey.includes('.');
+    const saved = { ...connection, apiKey: isAlreadyEncrypted ? connection.apiKey : encrypt(connection.apiKey, config), userId: input.userId || 'admin' };
     if (index < 0) existing.push(saved);
     else existing[index] = saved;
     await atomicJson('connections.json', existing);
