@@ -448,11 +448,21 @@ export function createApp(config, options = {}) {
           await probeOdoo({ ...encrypted, version }, serverConfig);
           const replace = form.get('replace') === '1' || form.get('replace') === 'true';
           const connUserId = isAdminUser ? (form.get('userId') || 'admin') : currentUser.id;
+          const isEdit = form.get('isEdit') === 'true';
+          let finalApiKey = form.get('apiKey');
+          
+          if (isEdit && !finalApiKey) {
+             const existing = await listConnections(connUserId);
+             const oldConn = existing.find(c => c.slug === form.get('slug'));
+             if (oldConn) finalApiKey = oldConn.apiKey;
+          }
+
           await saveConnection({
             ...validated,
             version,
             userId: connUserId,
-          }, serverConfig, { replace });
+            apiKey: finalApiKey
+          }, serverConfig, { replace: isEdit });
           return redirect(res, '/admin/connections?notice=saved');
         } catch (err) {
           const connListUser = isAdminUser ? null : currentUser.id;

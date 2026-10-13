@@ -70,6 +70,25 @@ function layout(title, content, { active = 'overview', notice = '', error = '', 
       ${content}
     </main>
   </div>
+
+<script>
+  function editConnection(conn) {
+    const form = document.querySelector('form[action="/admin/connections"]');
+    form.querySelector('input[name="slug"]').value = conn.slug;
+    form.querySelector('input[name="slug"]').readOnly = true;
+    form.querySelector('input[name="url"]').value = conn.url;
+    form.querySelector('input[name="database"]').value = conn.database;
+    form.querySelector('select[name="version"]').value = conn.version;
+    form.querySelector('input[name="canCreate"]').checked = !!conn.canCreate;
+    form.querySelector('input[name="canRead"]').checked = conn.canRead !== false;
+    form.querySelector('input[name="canUpdate"]').checked = !!conn.canUpdate;
+    form.querySelector('input[name="canDelete"]').checked = !!conn.canDelete;
+    form.querySelector('input[name="excludeAccounting"]').checked = !!conn.excludeAccounting;
+    form.querySelector('input[name="excludePayroll"]').checked = !!conn.excludePayroll;
+    form.querySelector('input[name="isEdit"]').value = "true";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+</script>
 </body>
 </html>`;
 }
@@ -175,6 +194,25 @@ export function landingPage({ isLoggedIn = false } = {}) {
   <footer style="text-align:center;padding:40px 24px;border-top:1px solid var(--border-subtle);color:var(--text-dim);font-size:0.85rem">
     PT Abajoo Transformasi Teknologi · Internal Tooling Platform · Model Context Protocol Gateway
   </footer>
+
+<script>
+  function editConnection(conn) {
+    const form = document.querySelector('form[action="/admin/connections"]');
+    form.querySelector('input[name="slug"]').value = conn.slug;
+    form.querySelector('input[name="slug"]').readOnly = true;
+    form.querySelector('input[name="url"]').value = conn.url;
+    form.querySelector('input[name="database"]').value = conn.database;
+    form.querySelector('select[name="version"]').value = conn.version;
+    form.querySelector('input[name="canCreate"]').checked = !!conn.canCreate;
+    form.querySelector('input[name="canRead"]').checked = conn.canRead !== false;
+    form.querySelector('input[name="canUpdate"]').checked = !!conn.canUpdate;
+    form.querySelector('input[name="canDelete"]').checked = !!conn.canDelete;
+    form.querySelector('input[name="excludeAccounting"]').checked = !!conn.excludeAccounting;
+    form.querySelector('input[name="excludePayroll"]').checked = !!conn.excludePayroll;
+    form.querySelector('input[name="isEdit"]').value = "true";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+</script>
 </body>
 </html>`;
 }
@@ -213,6 +251,7 @@ export function loginPage({ csrf, error = '', notice = '' }) {
       </div>` : ''}
 
     <form action="/login" method="post" autocomplete="on">
+      <input type="hidden" name="isEdit" value="false">
       <input type="hidden" name="csrf" value="${escape(csrf)}">
 
       <div class="form-group">
@@ -269,6 +308,25 @@ export function loginPage({ csrf, error = '', notice = '' }) {
       }
     })();
   </script>
+
+<script>
+  function editConnection(conn) {
+    const form = document.querySelector('form[action="/admin/connections"]');
+    form.querySelector('input[name="slug"]').value = conn.slug;
+    form.querySelector('input[name="slug"]').readOnly = true;
+    form.querySelector('input[name="url"]').value = conn.url;
+    form.querySelector('input[name="database"]').value = conn.database;
+    form.querySelector('select[name="version"]').value = conn.version;
+    form.querySelector('input[name="canCreate"]').checked = !!conn.canCreate;
+    form.querySelector('input[name="canRead"]').checked = conn.canRead !== false;
+    form.querySelector('input[name="canUpdate"]').checked = !!conn.canUpdate;
+    form.querySelector('input[name="canDelete"]').checked = !!conn.canDelete;
+    form.querySelector('input[name="excludeAccounting"]').checked = !!conn.excludeAccounting;
+    form.querySelector('input[name="excludePayroll"]').checked = !!conn.excludePayroll;
+    form.querySelector('input[name="isEdit"]').value = "true";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+</script>
 </body>
 </html>`;
 }
@@ -393,7 +451,8 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
         <details>
           <summary class="btn btn-danger btn-sm" style="display:inline-block;cursor:pointer">Remove</summary>
           <form action="/admin/delete" method="post" style="margin-top:10px;background:var(--bg-input);padding:10px;border-radius:6px">
-            <input type="hidden" name="csrf" value="${escape(csrf)}">
+            <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
             <input type="hidden" name="slug" value="${escape(c.slug)}">
             <label style="font-size:0.75rem;display:block;margin-bottom:4px">Ketik slug "<strong>${escape(c.slug)}</strong>" untuk konfirmasi:</label>
             <input name="confirm" required style="padding:6px;font-size:0.8rem;margin-bottom:8px">
@@ -424,7 +483,8 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
       <p class="card-desc">Koneksi akan dites (probe/authentication) terlebih dahulu sebelum disimpan.</p>
 
       <form action="/admin/connections" method="post">
-        <input type="hidden" name="csrf" value="${escape(csrf)}">
+        <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
         <div class="form-grid">
           <div class="form-group">
             <label>Connection Slug</label>
@@ -556,7 +616,7 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
   const rows = keys.map((k) => `
     <tr>
       <td><strong>${escape(k.name)}</strong></td>
-      <td><code>${escape(k.prefix)}…</code></td>
+      <td><code id="key-prefix-${k.id}">${escape(k.prefix)}…</code></td>
       <td><span class="badge ${k.scope === 'admin' ? 'badge-warning' : 'badge-info'}">${escape(k.scope)}</span></td>
       <td>${k.rate_limit ? `${k.rate_limit}/min` : '∞'}</td>
       <td>${k.ip_allowlist ? escape(k.ip_allowlist) : '<span style="color:var(--text-dim)">Any</span>'}</td>
@@ -568,16 +628,53 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
             ? `<span class="badge badge-muted">Expired</span>`
             : `<span class="badge badge-success">Active</span>`}
       </td>
-      <td>
+      <td style="display:flex;gap:5px">
         ${!k.revoked_at ? `
+          <button class="btn btn-secondary btn-sm" type="button" onclick="revealKey('${k.id}')">Reveal</button>
           <form action="/admin/keys/revoke" method="post" style="display:inline">
-            <input type="hidden" name="csrf" value="${escape(csrf)}">
+            <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
             <input type="hidden" name="id" value="${escape(k.id)}">
             <button class="btn btn-danger btn-sm" type="submit">Revoke</button>
           </form>` : '—'}
       </td>
     </tr>
   `).join('');
+
+
+<div id="revealModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:400px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+    <h3 style="margin-top:0">Reveal API Key</h3>
+    <p style="font-size:0.9rem;color:var(--text-dim)">Masukkan password akun Anda untuk melihat API Key:</p>
+    <form id="revealForm">
+      <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
+      <input type="hidden" id="revealKeyId" name="keyId">
+      <input type="password" name="password" required placeholder="User password" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid var(--border)">
+      <button class="btn btn-primary" type="submit" style="width:100%;padding:10px">Reveal Key</button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px;padding:10px" type="button" onclick="document.getElementById('revealModal').style.display='none'">Cancel</button>
+    </form>
+    <div id="revealedToken" style="margin-top:15px;word-break:break-all;font-family:monospace;background:var(--bg-input);padding:10px;border-radius:6px;display:none;color:var(--tosca)"></div>
+  </div>
+</div>
+<script>
+  function revealKey(id) {
+    document.getElementById('revealKeyId').value = id;
+    document.getElementById('revealModal').style.display = 'flex';
+  }
+  document.getElementById('revealForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const res = await fetch('/admin/keys/reveal', { method: 'POST', body: new URLSearchParams(formData) });
+    const data = await res.json();
+    if (data.token) {
+      document.getElementById('revealedToken').textContent = data.token;
+      document.getElementById('revealedToken').style.display = 'block';
+    } else {
+      alert(data.error || 'Terjadi kesalahan');
+    }
+  });
+</script>
 
   return layout('API Keys', `
     <div class="card">
@@ -599,7 +696,8 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
       <p class="card-desc">Token unik berformat <code>abj_mcp_...</code> akan dibuat secara kriptografis.</p>
 
       <form action="/admin/keys/create" method="post">
-        <input type="hidden" name="csrf" value="${escape(csrf)}">
+        <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
         <div class="form-grid">
           <div class="form-group">
             <label>Key Name / Client Label</label>
@@ -658,7 +756,8 @@ export function sessionsPage({ sessions, csrf, notice, error, user = null }) {
       <td>
         ${s.state === 'active' ? `
           <form action="/admin/sessions/revoke" method="post" style="display:inline">
-            <input type="hidden" name="csrf" value="${escape(csrf)}">
+            <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
             <input type="hidden" name="id" value="${escape(s.id)}">
             <button class="btn btn-danger btn-sm" type="submit">Revoke</button>
           </form>` : '—'}
@@ -778,6 +877,7 @@ export function registerPage({ csrf, error = '', notice = '' }) {
       </div>` : ''}
 
     <form action="/register" method="post" autocomplete="on">
+      <input type="hidden" name="isEdit" value="false">
       <input type="hidden" name="csrf" value="${escape(csrf)}">
 
       <div class="form-group">
@@ -822,6 +922,25 @@ export function registerPage({ csrf, error = '', notice = '' }) {
       <span>Session 8 jam · AES-256</span>
     </div>
   </div>
+
+<script>
+  function editConnection(conn) {
+    const form = document.querySelector('form[action="/admin/connections"]');
+    form.querySelector('input[name="slug"]').value = conn.slug;
+    form.querySelector('input[name="slug"]').readOnly = true;
+    form.querySelector('input[name="url"]').value = conn.url;
+    form.querySelector('input[name="database"]').value = conn.database;
+    form.querySelector('select[name="version"]').value = conn.version;
+    form.querySelector('input[name="canCreate"]').checked = !!conn.canCreate;
+    form.querySelector('input[name="canRead"]').checked = conn.canRead !== false;
+    form.querySelector('input[name="canUpdate"]').checked = !!conn.canUpdate;
+    form.querySelector('input[name="canDelete"]').checked = !!conn.canDelete;
+    form.querySelector('input[name="excludeAccounting"]').checked = !!conn.excludeAccounting;
+    form.querySelector('input[name="excludePayroll"]').checked = !!conn.excludePayroll;
+    form.querySelector('input[name="isEdit"]').value = "true";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+</script>
 </body>
 </html>`;
 }
@@ -840,7 +959,8 @@ export function usersPage({ users = [], csrf, notice = '', error = '', user = nu
           <details>
             <summary class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Reset PW</summary>
             <form action="/admin/users/reset-password" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
-              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
               <input type="hidden" name="userId" value="${escape(u.id)}">
               <div class="form-group" style="margin-bottom:8px">
                 <label style="font-size:0.75rem">Password baru</label>
@@ -853,7 +973,8 @@ export function usersPage({ users = [], csrf, notice = '', error = '', user = nu
           <details>
             <summary class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Edit</summary>
             <form action="/admin/users/update" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
-              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
               <input type="hidden" name="userId" value="${escape(u.id)}">
               <div class="form-group" style="margin-bottom:8px">
                 <label style="font-size:0.75rem">Email</label>
@@ -880,7 +1001,8 @@ export function usersPage({ users = [], csrf, notice = '', error = '', user = nu
           <details>
             <summary class="btn btn-danger btn-sm" style="display:inline-block;cursor:pointer;list-style:none">Delete</summary>
             <form action="/admin/users/delete" method="post" style="margin-top:8px;background:var(--bg-input);padding:10px;border-radius:6px;min-width:220px">
-              <input type="hidden" name="csrf" value="${escape(csrf)}">
+              <input type="hidden" name="isEdit" value="false">
+      <input type="hidden" name="csrf" value="${escape(csrf)}">
               <input type="hidden" name="userId" value="${escape(u.id)}">
               <p style="font-size:0.82rem;margin:0 0 8px;color:var(--danger)">Yakin hapus user <strong>${escape(u.username)}</strong>? Koneksi milik user ini tidak ikut terhapus.</p>
               <button class="btn btn-danger btn-sm" type="submit" style="width:100%">Hapus Permanen</button>
