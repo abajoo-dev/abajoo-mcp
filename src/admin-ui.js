@@ -448,6 +448,7 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
       </td>
       ${user && user.role === 'admin' ? `<td><span class="badge ${c.userId && c.userId !== 'admin' ? 'badge-info' : 'badge-warning'}">${escape(c.userId || 'admin')}</span></td>` : ''}
       <td>
+        <button class="btn btn-secondary btn-sm" style="margin-bottom:10px" type="button" onclick='editConnection(${JSON.stringify(c)})'>Edit</button>
         <details>
           <summary class="btn btn-danger btn-sm" style="display:inline-block;cursor:pointer">Remove</summary>
           <form action="/admin/delete" method="post" style="margin-top:10px;background:var(--bg-input);padding:10px;border-radius:6px">
