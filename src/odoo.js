@@ -1,3 +1,11 @@
+
+async function detectDatabase(url) {
+  try {
+    const res = await fetch(url + '/web/database/list', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', params: {} }) });
+    const json = await res.json();
+    return json.result && json.result.length > 0 ? json.result[0] : null;
+  } catch { return null; }
+}
 import { getApiKey, isAccountingModel, isPayrollModel } from './store.js';
 
 export class OdooHttpError extends Error {
