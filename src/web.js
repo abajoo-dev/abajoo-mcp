@@ -202,7 +202,8 @@ export function createApp(config, options = {}) {
         const inputPassword = form.get('password') || '';
         let sessionUser = null;
         if (inputUsername === 'admin' && equalHash(inputPassword, expected.salt, expected.adminHash)) {
-          sessionUser = { id: 'admin', username: 'admin', email: 'admin@local', role: 'admin' };
+          const db = getDb();
+          sessionUser = db.prepare("SELECT * FROM users WHERE username = 'admin'").get();
         } else {
           const dbUser = authenticateUser(inputUsername, inputPassword);
           if (dbUser) sessionUser = dbUser;
