@@ -641,21 +641,7 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
     </tr>
   `).join('');
 
-  return layout('API Keys', `
-    <div class="card">
-      <h2 class="card-title">Granular MCP API Keys</h2>
-      <p class="card-desc">Kunci akses khusus untuk agen atau aplikasi klien. Token hanya disimpan dalam bentuk SHA-256 hash.</p>
-      ${rows ? `
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>NAME</th><th>PREFIX</th><th>SCOPE</th><th>RATE LIMIT</th><th>IP ALLOWLIST</th><th>LAST USED</th><th>STATUS</th><th>ACTION</th></tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>` : empty('Belum ada API Key', 'Buat API key baru untuk agen AI Anda menggunakan form di bawah.')}
-    </div>
-
+  const modalHtml = `
     <div id="revealModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center">
       <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:400px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
         <h3 style="margin-top:0">Reveal API Key</h3>
@@ -688,8 +674,26 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
         }
       });
     </script>
+  `;
+
+  return layout('API Keys', `
+    <div class="card">
+      <h2 class="card-title">Granular MCP API Keys</h2>
+      <p class="card-desc">Kunci akses khusus untuk agen atau aplikasi klien. Token hanya disimpan dalam bentuk SHA-256 hash.</p>
+      ${rows ? `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>NAME</th><th>PREFIX</th><th>SCOPE</th><th>RATE LIMIT</th><th>IP ALLOWLIST</th><th>LAST USED</th><th>STATUS</th><th>ACTION</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>` : empty('Belum ada API Key', 'Buat API key baru untuk agen AI Anda menggunakan form di bawah.')}
+    </div>
+    ${modalHtml}
   `, { active: 'keys', notice, error, tokenNotice, user });
 }
+
 
 export function sessionsPage({ sessions, csrf, notice, error, user = null }) {
   const rows = sessions.map((s) => `
