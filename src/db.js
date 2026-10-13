@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
-import { dataDir, readJson, hashSecret, equalHash } from './config.js';
+import { dataDir, readJson, hashSecret, equalHash, encrypt, decrypt } from './config.js';
 
 let dbInstance = null;
 
@@ -81,6 +81,7 @@ export function getDb() {
     CREATE INDEX IF NOT EXISTS idx_keys_hash ON api_keys(token_hash);
   `);
 
+  try { db.exec("ALTER TABLE api_keys ADD COLUMN encrypted_token TEXT;"); } catch (_) {}
   // Migrations for existing databases
   try { db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT;"); } catch (_) {}
   try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT;"); } catch (_) {}
@@ -134,11 +135,13 @@ export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllo
   const prefix = token.slice(0, 14);
   const token_hash = hashToken(token);
   const created_at = new Date().toISOString();
+  // Encrypt for storage
+  const encrypted = encrypt(token, { encryptionKey: process.env.ABJ_ENCRYPTION_KEY || 'default-fallback-key-please-change' });
 
   db.prepare(`
-    INSERT INTO api_keys (id, name, prefix, token_hash, scope, rate_limit, ip_allowlist, expires_at, created_at, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, String(name || 'Default Key').trim(), prefix, token_hash, scope, Number(rateLimit) || 60, String(ipAllowlist || '').trim(), expiresAt || null, created_at, userId || null);
+    INSERT INTO api_keys (id, name, prefix, token_hash, scope, rate_limit, ip_allowlist, expires_at, created_at, user_id, encrypted_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, String(name || 'Default Key').trim(), prefix, token_hash, scope, Number(rateLimit) || 60, String(ipAllowlist || '').trim(), expiresAt || null, created_at, userId || null, encrypted);
 
   return { id, name, prefix, token, scope, rateLimit, expiresAt, created_at, userId };
 }
@@ -455,3 +458,18 @@ export function ensureAdminUser({ salt, adminHash }) {
   ).run(id, 'admin', 'admin@local', adminHash, salt, 'admin', 'active', now, now);
 }
 
+
+export function revealApiKey(id, userId, password) {
+  const db = getDb();
+  // Verify User identity first
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user || !equalHash(password, user.salt, user.password_hash)) {
+    throw new Error('Password salah');
+  }
+  
+  const key = db.prepare('SELECT encrypted_token FROM api_keys WHERE id = ? AND user_id = ?').get(id, userId);
+  if (!key) throw new Error('Key tidak ditemukan');
+  
+  const serverConfig = readJson('server.json');
+  return decrypt(key.encrypted_token, serverConfig);
+}

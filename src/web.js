@@ -20,7 +20,7 @@ import {
 import {
   createApiKey,
   listApiKeys,
-  revokeApiKey,
+  revokeApiKey, revealApiKey,
   authenticateKey,
   authenticateUser,
   createUser,
@@ -372,6 +372,17 @@ export function createApp(config, options = {}) {
         } catch (err) {
           const users = listUsers();
           return respond(res, 400, usersPage({ users, csrf: admin.csrf, error: err.message, user: currentUser }), 'text/html; charset=utf-8');
+        }
+      }
+
+      if (pathname === '/admin/keys/reveal') {
+        const keyId = form.get('keyId');
+        const password = form.get('password');
+        try {
+          const token = revealApiKey(keyId, currentUser.id, password);
+          return respond(res, 200, JSON.stringify({ token }), 'application/json');
+        } catch (err) {
+          return respond(res, 403, JSON.stringify({ error: err.message }), 'application/json');
         }
       }
 
