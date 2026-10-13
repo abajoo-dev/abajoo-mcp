@@ -73,7 +73,7 @@ export function validateConnection(input) {
   const database = String(input.database || '').trim();
   const login = String(input.login || '').trim();
   const apiKey = String(input.apiKey || '');
-  if (!database || database.length > 100 || !login || login.length > 250 || !apiKey) throw new Error('Database, login, and API key are required');
+  if (!login || login.length > 250 || !apiKey) throw new Error('Login and API key are required');
 
   // 6 Permissions & Exclusions
   const canCreate = Boolean(input.canCreate);

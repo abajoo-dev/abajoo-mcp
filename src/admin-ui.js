@@ -499,7 +499,7 @@ export function connectionsPage({ connections, csrf, notice, error, formValues =
           </div>
           <div class="form-group">
             <label>Database Name</label>
-            <input name="database" required placeholder="odoo_production">
+            <input name="database" placeholder="Kosongkan jika SaaS">
           </div>
           <div class="form-group">
             <label>User Login / Email</label>
