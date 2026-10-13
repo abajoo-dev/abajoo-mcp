@@ -471,6 +471,7 @@ export function revealApiKey(id, userId, password) {
   
   const key = db.prepare('SELECT encrypted_token FROM api_keys WHERE id = ? AND user_id = ?').get(id, userId);
   if (!key) throw new Error('Key tidak ditemukan');
+  if (!key.encrypted_token) throw new Error('Key ini adalah versi lama (Legacy) dan tidak bisa dibuka (Reveal). Mohon generate ulang key.');
   
   const serverConfig = readJson('server.json');
   return decrypt(key.encrypted_token, serverConfig);
