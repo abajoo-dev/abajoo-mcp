@@ -632,49 +632,13 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
         ${!k.revoked_at ? `
           <button class="btn btn-secondary btn-sm" type="button" onclick="revealKey('${k.id}')">Reveal</button>
           <form action="/admin/keys/revoke" method="post" style="display:inline">
-            <input type="hidden" name="isEdit" value="false">
-      <input type="hidden" name="csrf" value="${escape(csrf)}">
+            <input type="hidden" name="csrf" value="${escape(csrf)}">
             <input type="hidden" name="id" value="${escape(k.id)}">
             <button class="btn btn-danger btn-sm" type="submit">Revoke</button>
           </form>` : '—'}
       </td>
     </tr>
   `).join('');
-
-
-<div id="revealModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center">
-  <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:400px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
-    <h3 style="margin-top:0">Reveal API Key</h3>
-    <p style="font-size:0.9rem;color:var(--text-dim)">Masukkan password akun Anda untuk melihat API Key:</p>
-    <form id="revealForm">
-      <input type="hidden" name="isEdit" value="false">
-      <input type="hidden" name="csrf" value="${escape(csrf)}">
-      <input type="hidden" id="revealKeyId" name="keyId">
-      <input type="password" name="password" required placeholder="User password" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid var(--border)">
-      <button class="btn btn-primary" type="submit" style="width:100%;padding:10px">Reveal Key</button>
-      <button class="btn btn-secondary" style="width:100%;margin-top:8px;padding:10px" type="button" onclick="document.getElementById('revealModal').style.display='none'">Cancel</button>
-    </form>
-    <div id="revealedToken" style="margin-top:15px;word-break:break-all;font-family:monospace;background:var(--bg-input);padding:10px;border-radius:6px;display:none;color:var(--tosca)"></div>
-  </div>
-</div>
-<script>
-  function revealKey(id) {
-    document.getElementById('revealKeyId').value = id;
-    document.getElementById('revealModal').style.display = 'flex';
-  }
-  document.getElementById('revealForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const res = await fetch('/admin/keys/reveal', { method: 'POST', body: new URLSearchParams(formData) });
-    const data = await res.json();
-    if (data.token) {
-      document.getElementById('revealedToken').textContent = data.token;
-      document.getElementById('revealedToken').style.display = 'block';
-    } else {
-      alert(data.error || 'Terjadi kesalahan');
-    }
-  });
-</script>
 
   return layout('API Keys', `
     <div class="card">
@@ -691,51 +655,40 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
         </div>` : empty('Belum ada API Key', 'Buat API key baru untuk agen AI Anda menggunakan form di bawah.')}
     </div>
 
-    <div class="card">
-      <h2 class="card-title">Generate New API Key</h2>
-      <p class="card-desc">Token unik berformat <code>abj_mcp_...</code> akan dibuat secara kriptografis.</p>
-
-      <form action="/admin/keys/create" method="post">
-        <input type="hidden" name="isEdit" value="false">
-      <input type="hidden" name="csrf" value="${escape(csrf)}">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Key Name / Client Label</label>
-            <input name="name" required placeholder="Claude Desktop Staging">
-          </div>
-          <div class="form-group">
-            <label>Permission Scope</label>
-            <select name="scope">
-              <option value="crud_read">crud_read (Search &amp; Describe Models)</option>
-              <option value="config_read">config_read (+ System Info &amp; Module List)</option>
-              <option value="anomaly_read">anomaly_read (+ Data Anomaly Scanner)</option>
-              <option value="admin">admin (Full Access)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Rate Limit (Requests / Minute)</label>
-            <input name="rateLimit" type="number" min="5" max="600" value="60">
-          </div>
-          <div class="form-group">
-            <label>IP Allowlist (Optional)</label>
-            <input name="ipAllowlist" placeholder="192.168.1.50, 10.0.0.12">
-            <small>Pisahkan dengan koma. Kosongkan untuk mengizinkan semua IP.</small>
-          </div>
-          <div class="form-group">
-            <label>Expiration Date (Optional)</label>
-            <input name="expiresAt" type="date">
-          </div>
-        </div>
-        <button class="btn btn-primary" type="submit">Generate API Key ➔</button>
-      </form>
+    <div id="revealModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center">
+      <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:400px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+        <h3 style="margin-top:0">Reveal API Key</h3>
+        <p style="font-size:0.9rem;color:var(--text-dim)">Masukkan password akun Anda untuk melihat API Key:</p>
+        <form id="revealForm">
+          <input type="hidden" name="csrf" value="${escape(csrf)}">
+          <input type="hidden" id="revealKeyId" name="keyId">
+          <input type="password" name="password" required placeholder="User password" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid var(--border)">
+          <button class="btn btn-primary" type="submit" style="width:100%;padding:10px">Reveal Key</button>
+          <button class="btn btn-secondary" style="width:100%;margin-top:8px;padding:10px" type="button" onclick="document.getElementById('revealModal').style.display='none'">Cancel</button>
+        </form>
+        <div id="revealedToken" style="margin-top:15px;word-break:break-all;font-family:monospace;background:var(--bg-input);padding:10px;border-radius:6px;display:none;color:var(--tosca)"></div>
+      </div>
     </div>
+    <script>
+      function revealKey(id) {
+        document.getElementById('revealKeyId').value = id;
+        document.getElementById('revealModal').style.display = 'flex';
+      }
+      document.getElementById('revealForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const res = await fetch('/admin/keys/reveal', { method: 'POST', body: new URLSearchParams(formData) });
+        const data = await res.json();
+        if (data.token) {
+          document.getElementById('revealedToken').textContent = data.token;
+          document.getElementById('revealedToken').style.display = 'block';
+        } else {
+          alert(data.error || 'Terjadi kesalahan');
+        }
+      });
+    </script>
   `, { active: 'keys', notice, error, tokenNotice, user });
 }
-
-/* =========================================================================
-   SESSIONS PAGE
-   ========================================================================= */
-
 export function sessionsPage({ sessions, csrf, notice, error, user = null }) {
   const rows = sessions.map((s) => `
     <tr>

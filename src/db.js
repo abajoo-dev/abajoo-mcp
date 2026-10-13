@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import { dataDir, readJson, hashSecret, equalHash, encrypt, decrypt } from './config.js';
 
@@ -135,8 +136,9 @@ export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllo
   const prefix = token.slice(0, 14);
   const token_hash = hashToken(token);
   const created_at = new Date().toISOString();
-  // Encrypt for storage
-  const encrypted = encrypt(token, { encryptionKey: process.env.ABJ_ENCRYPTION_KEY || 'default-fallback-key-please-change' });
+  // Read config synchronously for encryption
+  const serverConfig = JSON.parse(readFileSync(join(dataDir(), 'server.json'), 'utf8'));
+  const encrypted = encrypt(token, serverConfig);
 
   db.prepare(`
     INSERT INTO api_keys (id, name, prefix, token_hash, scope, rate_limit, ip_allowlist, expires_at, created_at, user_id, encrypted_token)
