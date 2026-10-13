@@ -690,6 +690,7 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
     </script>
   `, { active: 'keys', notice, error, tokenNotice, user });
 }
+
 export function sessionsPage({ sessions, csrf, notice, error, user = null }) {
   const rows = sessions.map((s) => `
     <tr>
