@@ -128,7 +128,7 @@ export function hashToken(token) {
   return createHash('sha256').update(String(token).trim()).digest('hex');
 }
 
-export function createApiKey({ name, scope = 'crud_read', rateLimit = 60, ipAllowlist = '', expiresAt = null, userId = null }) {
+export function createApiKey({ name, scope = 'all', rateLimit = 60, ipAllowlist = '', expiresAt = null, userId = null }) {
   const db = getDb();
   const id = randomUUID();
   const rawSecret = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
