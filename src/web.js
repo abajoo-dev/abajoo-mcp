@@ -18,6 +18,7 @@ import {
   usersPage,
 } from './admin-ui.js';
 import {
+  getDb,
   createApiKey,
   listApiKeys,
   revokeApiKey, revealApiKey,
