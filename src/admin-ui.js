@@ -690,6 +690,40 @@ export function keysPage({ keys, csrf, notice, error, tokenNotice, user = null }
           </table>
         </div>` : empty('Belum ada API Key', 'Buat API key baru untuk agen AI Anda menggunakan form di bawah.')}
     </div>
+    <div class="card">
+      <h2 class="card-title">Create MCP API Key</h2>
+      <p class="card-desc">Buat token khusus untuk klien AI. Salin token setelah dibuat; jangan membagikannya.</p>
+      <form action="/admin/keys/create" method="post">
+        <input type="hidden" name="csrf" value="${escape(csrf)}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="key-name">Key Name</label>
+            <input id="key-name" name="name" required maxlength="100" placeholder="Codex Local Test">
+          </div>
+          <div class="form-group">
+            <label for="key-scope">Scope</label>
+            <select id="key-scope" name="scope">
+              <option value="crud_read" selected>Read only (crud_read)</option>
+              <option value="config_read">Configuration read</option>
+              ${user?.role === 'admin' ? '<option value="admin">Admin (full access)</option>' : ''}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="key-rate">Rate Limit (requests/min)</label>
+            <input id="key-rate" type="number" name="rateLimit" value="60" min="1" max="10000">
+          </div>
+          <div class="form-group">
+            <label for="key-ip">IP Allowlist (optional)</label>
+            <input id="key-ip" name="ipAllowlist" placeholder="127.0.0.1">
+          </div>
+          <div class="form-group">
+            <label for="key-expiry">Expires At (optional)</label>
+            <input id="key-expiry" type="datetime-local" name="expiresAt">
+          </div>
+        </div>
+        <button class="btn btn-primary" type="submit">Create API Key</button>
+      </form>
+    </div>
     ${modalHtml}
   `, { active: 'keys', notice, error, tokenNotice, user });
 }
